@@ -1,0 +1,7 @@
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\linux-x64\PubTmp\Out\GloryLikeBackend
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\linux-x64\PubTmp\Out\appsettings.Development.json
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\linux-x64\PubTmp\Out\appsettings.json
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\linux-x64\PubTmp\Out\GloryLikeBackend.dll
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\linux-x64\PubTmp\Out\GloryLikeBackend.deps.json
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\linux-x64\PubTmp\Out\GloryLikeBackend.runtimeconfig.json
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\linux-x64\PubTmp\Out\GloryLikeBackend.pdb
