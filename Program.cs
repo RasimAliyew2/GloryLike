@@ -20,6 +20,8 @@ builder.Services.AddScoped<ISkillQuestionnaireService, SkillQuestionnaireService
 builder.Services.AddHttpClient<IOpenAiSkillQuestionnaireGenerator, OpenAiSkillQuestionnaireGenerator>();
 builder.Services.AddScoped<ISkillDepthAssessmentService, SkillDepthAssessmentService>();
 builder.Services.AddScoped<IJobOfferService, JobOfferService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 var app = builder.Build();
