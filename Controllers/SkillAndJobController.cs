@@ -1,29 +1,35 @@
-﻿using GloryLikeBackend.Services.Interfaces;
+using GloryLikeBackend.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
-namespace GloryLikeBackend.Controllers
+namespace GloryLikeBackend.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public sealed class SkillAndJobController : ControllerBase
 {
-    [ApiController]
-    [Route("api/[controller]")]
-    public class SkillAndJobController : Controller
+    private readonly ISkillAndJobService _skillAndJobService;
+
+    public SkillAndJobController(
+        ISkillAndJobService skillAndJobService)
     {
-        private readonly ISkillAndJobService _skillAndJobService;
+        _skillAndJobService = skillAndJobService;
+    }
 
-        public SkillAndJobController(ISkillAndJobService skillAndJobService)
-        {
-            _skillAndJobService = skillAndJobService;
-        }
+    [HttpGet("job-families")]
+    public async Task<IActionResult> GetAllJobs()
+    {
+        var jobs =
+            await _skillAndJobService.GetAllJobFamiliesAsync();
 
-        public IActionResult Index()
-        {
-            return View();
-        }
+        return Ok(jobs);
+    }
 
-        [HttpGet("job-families")]
-        public async Task<IActionResult> GetAllJobs()
-        {
-            var Jobs = await _skillAndJobService.GetAllJobFamiliesAsync();
-            return Ok(Jobs);
-        }
+    [HttpGet("skills")]
+    public async Task<IActionResult> GetAllSkills()
+    {
+        var skills =
+            await _skillAndJobService.GetAllSkillsAsync();
+
+        return Ok(skills);
     }
 }

@@ -1,11 +1,12 @@
-﻿using GloryLikeBackend.Models.SkillAndJob;
+using GloryLikeBackend.Models.SkillAndJob;
 
-namespace GloryLikeBackend.Services.Interfaces
+namespace GloryLikeBackend.Services.Interfaces;
+
+public interface ISkillAndJobService
 {
-    public interface ISkillAndJobService
-    {
-        public Task<List<JobFamily>> GetAllJobFamiliesAsync();
-        public Task AddJobFamiliesAsync(string JobName);
-       
-    }
+    Task<List<JobFamily>> GetAllJobFamiliesAsync();
+
+    Task<List<SkillLookupDto>> GetAllSkillsAsync();
+
+    Task AddJobFamiliesAsync(string jobName);
 }

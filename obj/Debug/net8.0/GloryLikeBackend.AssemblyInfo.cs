@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("GloryLikeBackend")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+feb3a0164b61462d6a30ffa45c302a428bdf2360")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2ec361199febea86155e7005b2a0f4702b540f13")]
 [assembly: System.Reflection.AssemblyProductAttribute("GloryLikeBackend")]
 [assembly: System.Reflection.AssemblyTitleAttribute("GloryLikeBackend")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

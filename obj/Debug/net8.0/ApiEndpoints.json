@@ -125,9 +125,9 @@
   },
   {
     "ContainingType": "GloryLikeBackend.Controllers.SkillAndJobController",
-    "Method": "Index",
-    "RelativePath": "api/SkillAndJob",
-    "HttpMethod": "",
+    "Method": "GetAllJobs",
+    "RelativePath": "api/SkillAndJob/job-families",
+    "HttpMethod": "GET",
     "IsController": true,
     "Order": 0,
     "Parameters": [],
@@ -135,8 +135,8 @@
   },
   {
     "ContainingType": "GloryLikeBackend.Controllers.SkillAndJobController",
-    "Method": "GetAllJobs",
-    "RelativePath": "api/SkillAndJob/job-families",
+    "Method": "GetAllSkills",
+    "RelativePath": "api/SkillAndJob/skills",
     "HttpMethod": "GET",
     "IsController": true,
     "Order": 0,
@@ -196,6 +196,58 @@
     ]
   },
   {
+    "ContainingType": "GloryLikeBackend.Controllers.UserProfileDataController",
+    "Method": "Get",
+    "RelativePath": "api/UserProfileData/{userId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "userId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "GloryLikeBackend.Dtos.ProfileData.UserProfileDataResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "GloryLikeBackend.Controllers.UserProfileDataController",
+    "Method": "Save",
+    "RelativePath": "api/UserProfileData/save",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "GloryLikeBackend.Dtos.ProfileData.SaveUserProfileDataRequest",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "GloryLikeBackend.Dtos.ProfileData.UserProfileDataResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
     "ContainingType": "GloryLikeBackend.Controllers.UsersController",
     "Method": "AddUser",
     "RelativePath": "api/Users",
@@ -242,6 +294,50 @@
       }
     ],
     "ReturnTypes": []
+  },
+  {
+    "ContainingType": "GloryLikeBackend.Controllers.VacanciesController",
+    "Method": "Create",
+    "RelativePath": "api/Vacancies",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "GloryLikeBackend.Dtos.Vacancies.CreateVacancyRequest",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.CreateVacancyResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 201
+      },
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.CreateVacancyResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 400
+      },
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.CreateVacancyResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 409
+      }
+    ]
   },
   {
     "ContainingType": "Program\u002B\u003C\u003Ec",
