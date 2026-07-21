@@ -1,6 +1,8 @@
 using System.Text.Json;
 using GloryLikeBackend.Data;
 using GloryLikeBackend.Dtos.Vacancies;
+using GloryLikeBackend.Models;
+using GloryLikeBackend.Models.Profile;
 using GloryLikeBackend.Models.SkillAndJob;
 using GloryLikeBackend.Models.Vacancies;
 using GloryLikeBackend.Services.Interfaces;
@@ -49,6 +51,12 @@ public sealed class VacancyService : IVacancyService
             "KnockOut"
         };
 
+    private static readonly string[] CandidateVisibleStatuses =
+    {
+        "Published",
+        "Active"
+    };
+
     private static readonly JsonSerializerOptions PayloadJsonOptions =
         new(JsonSerializerDefaults.Web);
 
@@ -61,6 +69,133 @@ public sealed class VacancyService : IVacancyService
     {
         _dbContext = dbContext;
         _logger = logger;
+    }
+
+    public async Task<CandidateVacancyListResponse?>
+        GetCandidateVacanciesAsync(
+            int candidateUserId,
+            CancellationToken cancellationToken = default)
+    {
+        var candidateExists = await _dbContext.Users
+            .AsNoTracking()
+            .AnyAsync(
+                user => user.Id == candidateUserId,
+                cancellationToken);
+
+        if (!candidateExists)
+            return null;
+
+        var candidateSkills = await _dbContext.UserSkills
+            .AsNoTracking()
+            .Where(skill => skill.UserId == candidateUserId)
+            .ToListAsync(cancellationToken);
+
+        var jobFamilyIds = candidateSkills
+            .Select(skill => skill.JobFamilyId)
+            .Where(jobFamilyId => jobFamilyId > 0)
+            .Distinct()
+            .ToList();
+
+        var response = new CandidateVacancyListResponse
+        {
+            Success = true,
+            CandidateUserId = candidateUserId,
+            CandidateJobFamilyIds = jobFamilyIds,
+            CandidateJobFamilyNames = candidateSkills
+                .Where(skill =>
+                    skill.JobFamilyId > 0
+                    && !string.IsNullOrWhiteSpace(skill.JobFamilyName))
+                .GroupBy(skill => skill.JobFamilyId)
+                .Select(group => group.First().JobFamilyName.Trim())
+                .OrderBy(name => name)
+                .ToList()
+        };
+
+        if (jobFamilyIds.Count == 0)
+        {
+            response.Message =
+                "Candidate UserSkills məlumatında JobFamilyId tapılmadı.";
+            return response;
+        }
+
+        var today = DateTime.UtcNow.Date;
+        var vacancies = await _dbContext.Vacancies
+            .AsNoTracking()
+            .Include(vacancy => vacancy.SkillRequirements)
+            .Include(vacancy => vacancy.Applications
+                .Where(application =>
+                    application.CandidateUserId == candidateUserId))
+            .Where(vacancy =>
+                jobFamilyIds.Contains(vacancy.JobFamilyId)
+                && CandidateVisibleStatuses.Contains(vacancy.Status)
+                && (!vacancy.PublishDate.HasValue
+                    || vacancy.PublishDate.Value.Date <= today)
+                && (!vacancy.ApplicationDeadline.HasValue
+                    || vacancy.ApplicationDeadline.Value.Date >= today))
+            .OrderByDescending(vacancy => vacancy.PublicationPriority)
+            .ThenByDescending(vacancy => vacancy.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        var employerIds = vacancies
+            .Select(vacancy => vacancy.EmployerUserId)
+            .Distinct()
+            .ToList();
+
+        var employers = await _dbContext.Users
+            .AsNoTracking()
+            .Where(user => employerIds.Contains(user.Id))
+            .ToDictionaryAsync(user => user.Id, cancellationToken);
+
+        var candidateScoreMap = BuildCandidateScoreMap(candidateSkills);
+
+        foreach (var vacancy in vacancies)
+        {
+            var templateSkills = BuildCandidateVacancyTemplate(
+                vacancy,
+                candidateScoreMap);
+            var application = vacancy.Applications.SingleOrDefault();
+
+            response.Vacancies.Add(new CandidateVacancyListItemDto
+            {
+                VacancyId = vacancy.Id,
+                PlatformVacancyId = vacancy.PlatformVacancyId,
+                EmployerUserId = vacancy.EmployerUserId,
+                EmployerName = employers.TryGetValue(
+                    vacancy.EmployerUserId,
+                    out var employer)
+                    ? BuildUserDisplayName(employer)
+                    : $"Employer #{vacancy.EmployerUserId}",
+                JobFamilyId = vacancy.JobFamilyId,
+                JobFamilyName = vacancy.JobFamilyName,
+                RoleTitle = vacancy.RoleTitle,
+                PositionName = vacancy.PositionName,
+                SeniorityName = vacancy.SeniorityName,
+                EmploymentType = vacancy.EmploymentType,
+                MinSalary = vacancy.MinSalary,
+                MaxSalary = vacancy.MaxSalary,
+                Currency = vacancy.Currency,
+                HideSalary = vacancy.HideSalary,
+                JobDescription = vacancy.JobDescription,
+                Visibility = vacancy.Visibility,
+                PublishDate = vacancy.PublishDate,
+                ApplicationDeadline = vacancy.ApplicationDeadline,
+                CreatedAtUtc = vacancy.CreatedAtUtc,
+                MatchScore = CalculateCandidateVacancyReadiness(
+                    templateSkills,
+                    candidateScoreMap),
+                Skills = templateSkills,
+                HasApplied = application is not null,
+                ApplicationId = application?.Id,
+                ApplicationStatus = application?.Status ?? string.Empty,
+                AppliedAtUtc = application?.AppliedAtUtc
+            });
+        }
+
+        response.Message = response.Vacancies.Count == 0
+            ? "Candidate JobFamilyId-lərinə uyğun aktiv vacancy tapılmadı."
+            : $"{response.Vacancies.Count} uyğun vacancy tapıldı.";
+
+        return response;
     }
 
     public async Task<List<EmployerVacancyListItemDto>>
@@ -81,15 +216,141 @@ public sealed class VacancyService : IVacancyService
                 PositionName = vacancy.PositionName,
                 Status = vacancy.Status,
 
-                // Candidate application aggregate hələ mövcud deyil.
-                // Cədvəl əlavə olunanda bu projection COUNT ilə əvəz ediləcək.
-                CandidateCount = 0,
+                CandidateCount = vacancy.Applications.Count,
                 PublishDate = vacancy.PublishDate,
                 ApplicationDeadline = vacancy.ApplicationDeadline,
                 CreatedAtUtc = vacancy.CreatedAtUtc,
                 UpdatedAtUtc = vacancy.UpdatedAtUtc
             })
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<ApplyToVacancyResult> ApplyToVacancyAsync(
+        int vacancyId,
+        int candidateUserId,
+        CancellationToken cancellationToken = default)
+    {
+        if (vacancyId <= 0 || candidateUserId <= 0)
+        {
+            return ApplyToVacancyResult.Invalid(
+                vacancyId,
+                candidateUserId,
+                "Vacancy və candidate user ID düzgün olmalıdır.");
+        }
+
+        var candidateExists = await _dbContext.Users
+            .AsNoTracking()
+            .AnyAsync(
+                user => user.Id == candidateUserId,
+                cancellationToken);
+
+        if (!candidateExists)
+        {
+            return ApplyToVacancyResult.NotFound(
+                vacancyId,
+                candidateUserId,
+                "Candidate user SQL-də tapılmadı.");
+        }
+
+        var vacancy = await _dbContext.Vacancies
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                item => item.Id == vacancyId,
+                cancellationToken);
+
+        if (vacancy is null)
+        {
+            return ApplyToVacancyResult.NotFound(
+                vacancyId,
+                candidateUserId,
+                "Vacancy SQL-də tapılmadı.");
+        }
+
+        var today = DateTime.UtcNow.Date;
+        var isVisible = CandidateVisibleStatuses.Contains(
+            vacancy.Status,
+            StringComparer.OrdinalIgnoreCase);
+
+        if (!isVisible
+            || (vacancy.PublishDate.HasValue
+                && vacancy.PublishDate.Value.Date > today)
+            || (vacancy.ApplicationDeadline.HasValue
+                && vacancy.ApplicationDeadline.Value.Date < today))
+        {
+            return ApplyToVacancyResult.Invalid(
+                vacancyId,
+                candidateUserId,
+                "Bu vacancy hazırda müraciət üçün aktiv deyil.");
+        }
+
+        var hasMatchingJob = await _dbContext.UserSkills
+            .AsNoTracking()
+            .AnyAsync(
+                skill =>
+                    skill.UserId == candidateUserId
+                    && skill.JobFamilyId > 0
+                    && skill.JobFamilyId == vacancy.JobFamilyId,
+                cancellationToken);
+
+        if (!hasMatchingJob)
+        {
+            return ApplyToVacancyResult.Invalid(
+                vacancyId,
+                candidateUserId,
+                "Candidate JobFamilyId-si bu vacancy ilə uyğun deyil.");
+        }
+
+        var existing = await _dbContext.VacancyApplications
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                application =>
+                    application.VacancyId == vacancyId
+                    && application.CandidateUserId == candidateUserId,
+                cancellationToken);
+
+        if (existing is not null)
+            return ApplyToVacancyResult.Applied(existing, true);
+
+        var now = DateTime.UtcNow;
+        var application = new VacancyApplication
+        {
+            VacancyId = vacancyId,
+            CandidateUserId = candidateUserId,
+            Status = VacancyApplicationStatuses.NoResponseYet,
+            AppliedAtUtc = now,
+            UpdatedAtUtc = now
+        };
+
+        _dbContext.VacancyApplications.Add(application);
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return ApplyToVacancyResult.Applied(application, false);
+        }
+        catch (DbUpdateException exception)
+        {
+            _dbContext.Entry(application).State = EntityState.Detached;
+
+            existing = await _dbContext.VacancyApplications
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    item =>
+                        item.VacancyId == vacancyId
+                        && item.CandidateUserId == candidateUserId,
+                    cancellationToken);
+
+            if (existing is not null)
+                return ApplyToVacancyResult.Applied(existing, true);
+
+            _logger.LogError(
+                exception,
+                "Candidate {CandidateUserId} vacancy {VacancyId} üçün apply edilərkən SQL xətası baş verdi.",
+                candidateUserId,
+                vacancyId);
+
+            throw;
+        }
     }
 
     public async Task<CreateVacancyResult> CreateAsync(
@@ -289,6 +550,154 @@ public sealed class VacancyService : IVacancyService
             vacancy.Id,
             vacancy.PlatformVacancyId,
             vacancy.CreatedAtUtc);
+    }
+
+    private static CandidateScoreMap BuildCandidateScoreMap(
+        IReadOnlyCollection<UserSkill> skills)
+    {
+        return new CandidateScoreMap
+        {
+            ById = skills
+                .Where(skill => skill.SkillId > 0)
+                .GroupBy(skill => skill.SkillId)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.Max(GetCandidateSkillSignal)),
+            ByName = skills
+                .Where(skill =>
+                    !string.IsNullOrWhiteSpace(skill.SkillName))
+                .GroupBy(
+                    skill => NormalizeSkillName(skill.SkillName),
+                    StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.Max(GetCandidateSkillSignal),
+                    StringComparer.OrdinalIgnoreCase)
+        };
+    }
+
+    private static List<CandidateVacancySkillDto>
+        BuildCandidateVacancyTemplate(
+            Vacancy vacancy,
+            CandidateScoreMap candidateScores)
+    {
+        return vacancy.SkillRequirements
+            .Where(skill =>
+                skill.SkillId > 0
+                && !string.IsNullOrWhiteSpace(skill.SkillName))
+            .GroupBy(skill => skill.SkillId)
+            .Select(group =>
+            {
+                var first = group
+                    .OrderBy(skill => skill.SortOrder)
+                    .First();
+
+                var templateSkill = new CandidateVacancySkillDto
+                {
+                    SkillId = first.SkillId,
+                    SkillName = first.SkillName.Trim(),
+                    Weight = group.Max(skill => Math.Max(
+                        skill.MinimumVerificationLevel,
+                        0)),
+                    RequirementType = first.RequirementType
+                };
+
+                templateSkill.IsMatched = GetCandidateScore(
+                    templateSkill,
+                    candidateScores) > 0d;
+
+                return templateSkill;
+            })
+            .OrderByDescending(skill => skill.Weight)
+            .ThenBy(skill => skill.SkillName)
+            .ToList();
+    }
+
+    private static int CalculateCandidateVacancyReadiness(
+        IReadOnlyCollection<CandidateVacancySkillDto> templateSkills,
+        CandidateScoreMap candidateScores)
+    {
+        var denominator = templateSkills.Sum(
+            skill => (double)skill.Weight);
+
+        if (templateSkills.Count == 0 || denominator <= 0d)
+            return 0;
+
+        var numerator = templateSkills.Sum(skill =>
+            skill.Weight * GetCandidateScore(skill, candidateScores));
+
+        return (int)Math.Floor(
+            Math.Clamp(numerator / denominator, 0d, 100d) + 0.5d);
+    }
+
+    private static double GetCandidateScore(
+        CandidateVacancySkillDto templateSkill,
+        CandidateScoreMap candidateScores)
+    {
+        if (candidateScores.ById.TryGetValue(
+            templateSkill.SkillId,
+            out var byId))
+        {
+            return byId;
+        }
+
+        return candidateScores.ByName.TryGetValue(
+            NormalizeSkillName(templateSkill.SkillName),
+            out var byName)
+            ? byName
+            : 0d;
+    }
+
+    private static double GetCandidateSkillSignal(UserSkill skill)
+    {
+        var credibility = skill.CredibilityScore > 0d
+            ? Math.Clamp(skill.CredibilityScore, 0d, 100d)
+            : Math.Clamp(
+                (skill.KnowledgeScore * 0.45d)
+                + (skill.ExperienceScore * 0.55d),
+                0d,
+                100d);
+
+        if (skill.IsVerified
+            || string.Equals(
+                skill.Status?.Trim(),
+                "verified",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return credibility;
+        }
+
+        var status = skill.Status?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(status)
+            || status.Equals(
+                "self_declared",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return Math.Min(credibility, 40d);
+        }
+
+        return 0d;
+    }
+
+    private static string BuildUserDisplayName(User user)
+    {
+        var fullName = string.Join(
+            " ",
+            new[] { user.Name, user.Surname }
+                .Where(value => !string.IsNullOrWhiteSpace(value)));
+
+        return string.IsNullOrWhiteSpace(fullName)
+            ? string.IsNullOrWhiteSpace(user.UserName)
+                ? $"Employer #{user.Id}"
+                : user.UserName.Trim()
+            : fullName;
+    }
+
+    private static string NormalizeSkillName(string value)
+    {
+        return (value ?? string.Empty)
+            .Trim()
+            .ToLowerInvariant();
     }
 
     private static void Normalize(CreateVacancyPayload payload)
@@ -776,5 +1185,13 @@ public sealed class VacancyService : IVacancyService
                     SortOrder = index
                 });
         }
+    }
+
+    private sealed class CandidateScoreMap
+    {
+        public Dictionary<int, double> ById { get; set; } = new();
+
+        public Dictionary<string, double> ByName { get; set; } =
+            new(StringComparer.OrdinalIgnoreCase);
     }
 }

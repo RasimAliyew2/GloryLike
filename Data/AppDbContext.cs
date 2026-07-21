@@ -32,6 +32,8 @@ public class AppDbContext : DbContext
 
     public DbSet<Vacancy> Vacancies { get; set; }
 
+    public DbSet<VacancyApplication> VacancyApplications { get; set; }
+
     public DbSet<VacancySkillRequirement> VacancySkillRequirements { get; set; }
 
     public DbSet<VacancyBenefit> VacancyBenefits { get; set; }
@@ -319,6 +321,39 @@ public class AppDbContext : DbContext
             entity.HasOne<Position>()
                 .WithMany()
                 .HasForeignKey(item => item.PositionId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<VacancyApplication>(entity =>
+        {
+            entity.ToTable("VacancyApplications");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Status)
+                .HasMaxLength(30)
+                .IsRequired();
+            entity.Property(item => item.AppliedAtUtc)
+                .IsRequired();
+            entity.Property(item => item.UpdatedAtUtc)
+                .IsRequired();
+
+            entity.HasIndex(item => item.CandidateUserId)
+                .HasDatabaseName("IX_VacancyApplications_CandidateUserId");
+            entity.HasIndex(item => new
+                {
+                    item.VacancyId,
+                    item.CandidateUserId
+                })
+                .IsUnique()
+                .HasDatabaseName(
+                    "UX_VacancyApplications_VacancyId_CandidateUserId");
+
+            entity.HasOne(item => item.Vacancy)
+                .WithMany(item => item.Applications)
+                .HasForeignKey(item => item.VacancyId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(item => item.CandidateUserId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

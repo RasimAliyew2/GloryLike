@@ -47,6 +47,8 @@ public sealed class Vacancy
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
 
+    public List<VacancyApplication> Applications { get; set; } = new();
+
     public List<VacancySkillRequirement> SkillRequirements { get; set; } =
         new();
 
@@ -65,6 +67,23 @@ public sealed class Vacancy
 
     public List<VacancyPublicationChannel> PublicationChannels { get; set; } =
         new();
+}
+
+public static class VacancyApplicationStatuses
+{
+    public const string NoResponseYet = "NoResponseYet";
+}
+
+public sealed class VacancyApplication
+{
+    public int Id { get; set; }
+    public int VacancyId { get; set; }
+    public int CandidateUserId { get; set; }
+    public string Status { get; set; } =
+        VacancyApplicationStatuses.NoResponseYet;
+    public DateTime AppliedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
+    public Vacancy Vacancy { get; set; } = null!;
 }
 
 public sealed class VacancySkillRequirement

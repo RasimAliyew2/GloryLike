@@ -15,6 +15,95 @@ public sealed class VacanciesController : ControllerBase
         _vacancyService = vacancyService;
     }
 
+    [HttpGet("candidate/{candidateUserId:int}")]
+    [ProducesResponseType(
+        typeof(CandidateVacancyListResponse),
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(CandidateVacancyListResponse),
+        StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(
+        typeof(CandidateVacancyListResponse),
+        StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<CandidateVacancyListResponse>>
+        GetCandidateVacancies(
+            int candidateUserId,
+            CancellationToken cancellationToken)
+    {
+        if (candidateUserId <= 0)
+        {
+            return BadRequest(new CandidateVacancyListResponse
+            {
+                Success = false,
+                Message = "Candidate user ID düzgün deyil.",
+                CandidateUserId = candidateUserId
+            });
+        }
+
+        var response = await _vacancyService.GetCandidateVacanciesAsync(
+            candidateUserId,
+            cancellationToken);
+
+        if (response is null)
+        {
+            return NotFound(new CandidateVacancyListResponse
+            {
+                Success = false,
+                Message = "Candidate user SQL-də tapılmadı.",
+                CandidateUserId = candidateUserId
+            });
+        }
+
+        return Ok(response);
+    }
+
+    [HttpPost("{vacancyId:int}/applications")]
+    [ProducesResponseType(
+        typeof(ApplyToVacancyResponse),
+        StatusCodes.Status201Created)]
+    [ProducesResponseType(
+        typeof(ApplyToVacancyResponse),
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(ApplyToVacancyResponse),
+        StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(
+        typeof(ApplyToVacancyResponse),
+        StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApplyToVacancyResponse>> Apply(
+        int vacancyId,
+        [FromBody] ApplyToVacancyRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _vacancyService.ApplyToVacancyAsync(
+            vacancyId,
+            request.CandidateUserId,
+            cancellationToken);
+
+        var response = new ApplyToVacancyResponse
+        {
+            Success = result.Success,
+            Message = result.Message,
+            VacancyId = result.VacancyId,
+            CandidateUserId = result.CandidateUserId,
+            ApplicationId = result.ApplicationId,
+            Status = result.Status,
+            AppliedAtUtc = result.AppliedAtUtc,
+            AlreadyApplied = result.AlreadyApplied
+        };
+
+        if (result.Success)
+        {
+            return result.AlreadyApplied
+                ? Ok(response)
+                : StatusCode(StatusCodes.Status201Created, response);
+        }
+
+        return result.FailureKind == ApplyToVacancyFailureKind.NotFound
+            ? NotFound(response)
+            : BadRequest(response);
+    }
+
     [HttpGet("employer/{employerUserId:int}")]
     [ProducesResponseType(
         typeof(EmployerVacancyListResponse),
