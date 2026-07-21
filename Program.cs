@@ -21,6 +21,7 @@ builder.Services.AddHttpClient<IOpenAiSkillQuestionnaireGenerator, OpenAiSkillQu
 builder.Services.AddScoped<ISkillDepthAssessmentService, SkillDepthAssessmentService>();
 builder.Services.AddScoped<IJobOfferService, JobOfferService>();
 builder.Services.AddScoped<IVacancyService, VacancyService>();
+builder.Services.AddScoped<ITalentRadarService, TalentRadarService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddDbContext<AppDbContext>(options =>

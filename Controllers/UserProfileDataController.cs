@@ -47,6 +47,45 @@ public class UserProfileDataController : ControllerBase
         if (request.UserId <= 0)
             return BadRequest(Failed(request.UserId, "UserId düzgün deyil."));
 
+        var skillsToSave = request.Skills
+            .Where(skill => !string.IsNullOrWhiteSpace(skill.SkillName))
+            .ToList();
+
+        var skillWithoutJobFamily = skillsToSave.FirstOrDefault(
+            skill => skill.JobFamilyId <= 0);
+        if (skillWithoutJobFamily is not null)
+        {
+            return BadRequest(Failed(
+                request.UserId,
+                $"'{skillWithoutJobFamily.SkillName}' üçün JobFamilyId göndərilməyib."));
+        }
+
+        var requestedJobFamilyIds = skillsToSave
+            .Select(skill => skill.JobFamilyId)
+            .Distinct()
+            .ToList();
+
+        var canonicalJobFamilies = await _dbContext.JobFamilies
+            .AsNoTracking()
+            .Where(jobFamily => requestedJobFamilyIds.Contains(jobFamily.Id))
+            .ToDictionaryAsync(
+                jobFamily => jobFamily.Id,
+                jobFamily => jobFamily.JobName,
+                cancellationToken);
+
+        var unknownJobFamilyId = requestedJobFamilyIds.FirstOrDefault(
+            jobFamilyId => !canonicalJobFamilies.ContainsKey(jobFamilyId));
+        if (unknownJobFamilyId > 0)
+        {
+            return BadRequest(Failed(
+                request.UserId,
+                $"JobFamilyId={unknownJobFamilyId} JobFamilies cədvəlində tapılmadı."));
+        }
+
+        // SQL-də ID və ad həmişə eyni taxonomy sətrindən saxlanılır.
+        foreach (var skill in skillsToSave)
+            skill.JobFamilyName = canonicalJobFamilies[skill.JobFamilyId];
+
         var connection = _dbContext.Database.GetDbConnection();
         await OpenIfNeededAsync(connection, cancellationToken);
 
@@ -75,7 +114,7 @@ public class UserProfileDataController : ControllerBase
                 cancellationToken,
                 ("@UserId", request.UserId));
 
-            foreach (var skill in request.Skills.Where(x => !string.IsNullOrWhiteSpace(x.SkillName)))
+            foreach (var skill in skillsToSave)
             {
                 await ExecuteAsync(
                     connection,

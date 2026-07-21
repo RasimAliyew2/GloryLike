@@ -1,5 +1,6 @@
 using GloryLikeBackend.Models;
 using GloryLikeBackend.Models.Ai;
+using GloryLikeBackend.Models.Profile;
 using GloryLikeBackend.Models.SkillAndJob;
 using GloryLikeBackend.Models.Vacancies;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +27,8 @@ public class AppDbContext : DbContext
     public DbSet<JobOffer> JobOffers { get; set; }
 
     public DbSet<SkillQuestionnaire> SkillQuestionnaires { get; set; }
+
+    public DbSet<UserSkill> UserSkills { get; set; }
 
     public DbSet<Vacancy> Vacancies { get; set; }
 
@@ -164,7 +167,66 @@ public class AppDbContext : DbContext
             }).HasDatabaseName("IX_SkillQuestionnaires_CacheLookup");
         });
 
+        ConfigureUserSkills(modelBuilder);
         ConfigureVacancies(modelBuilder);
+    }
+
+    private static void ConfigureUserSkills(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<UserSkill>(entity =>
+        {
+            entity.ToTable("UserSkills");
+            entity.HasKey(item => item.Id);
+
+            entity.Property(item => item.SkillName)
+                .HasMaxLength(150)
+                .IsRequired();
+            entity.Property(item => item.PositionName)
+                .HasMaxLength(150)
+                .IsRequired();
+            entity.Property(item => item.SeniorityName)
+                .HasMaxLength(50)
+                .IsRequired();
+            entity.Property(item => item.JobFamilyName)
+                .HasMaxLength(150)
+                .IsRequired();
+            entity.Property(item => item.SkillComplexity)
+                .HasMaxLength(30)
+                .IsRequired();
+            entity.Property(item => item.Status)
+                .HasMaxLength(30)
+                .IsRequired();
+            entity.Property(item => item.TaskComplexity)
+                .HasMaxLength(50)
+                .IsRequired();
+            entity.Property(item => item.OwnershipLevel)
+                .HasMaxLength(50)
+                .IsRequired();
+            entity.Property(item => item.DepthTier)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.HasIndex(item => item.UserId)
+                .HasDatabaseName("IX_UserSkills_UserId");
+            entity.HasIndex(item => item.JobFamilyId)
+                .HasDatabaseName("IX_UserSkills_JobFamilyId");
+            entity.HasIndex(item => new
+                {
+                    item.UserId,
+                    item.SkillName
+                })
+                .IsUnique()
+                .HasDatabaseName("UX_UserSkills_UserId_SkillName");
+
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(item => item.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<JobFamily>()
+                .WithMany()
+                .HasForeignKey(item => item.JobFamilyId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
     }
 
     private static void ConfigureVacancies(ModelBuilder modelBuilder)

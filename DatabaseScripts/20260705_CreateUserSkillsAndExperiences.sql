@@ -14,7 +14,7 @@ BEGIN
         SeniorityId INT NOT NULL CONSTRAINT DF_UserSkills_SeniorityId DEFAULT 0,
         SeniorityName NVARCHAR(50) NOT NULL CONSTRAINT DF_UserSkills_SeniorityName DEFAULT N'',
 
-        JobFamilyId INT NOT NULL CONSTRAINT DF_UserSkills_JobFamilyId DEFAULT 0,
+        JobFamilyId INT NOT NULL,
         JobFamilyName NVARCHAR(150) NOT NULL CONSTRAINT DF_UserSkills_JobFamilyName DEFAULT N'',
 
         SkillComplexity NVARCHAR(30) NOT NULL CONSTRAINT DF_UserSkills_SkillComplexity DEFAULT N'medium',
@@ -39,10 +39,13 @@ BEGIN
         UpdatedAt DATETIME2 NOT NULL CONSTRAINT DF_UserSkills_UpdatedAt DEFAULT SYSUTCDATETIME(),
 
         CONSTRAINT FK_UserSkills_Users
-            FOREIGN KEY (UserId) REFERENCES dbo.Users(Id) ON DELETE CASCADE
+            FOREIGN KEY (UserId) REFERENCES dbo.Users(Id) ON DELETE CASCADE,
+        CONSTRAINT FK_UserSkills_JobFamilies_JobFamilyId
+            FOREIGN KEY (JobFamilyId) REFERENCES dbo.JobFamilies(Id)
     );
 
     CREATE INDEX IX_UserSkills_UserId ON dbo.UserSkills(UserId);
+    CREATE INDEX IX_UserSkills_JobFamilyId ON dbo.UserSkills(JobFamilyId);
     CREATE UNIQUE INDEX UX_UserSkills_UserId_SkillName ON dbo.UserSkills(UserId, SkillName);
 END;
 GO

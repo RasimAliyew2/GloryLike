@@ -196,6 +196,50 @@
     ]
   },
   {
+    "ContainingType": "GloryLikeBackend.Controllers.TalentRadarController",
+    "Method": "Get",
+    "RelativePath": "api/TalentRadar/{employerUserId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "employerUserId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "GloryLikeBackend.Dtos.TalentRadar.TalentRadarResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      },
+      {
+        "Type": "GloryLikeBackend.Dtos.TalentRadar.TalentRadarResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 400
+      },
+      {
+        "Type": "GloryLikeBackend.Dtos.TalentRadar.TalentRadarResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 404
+      }
+    ]
+  },
+  {
     "ContainingType": "GloryLikeBackend.Controllers.UserProfileDataController",
     "Method": "Get",
     "RelativePath": "api/UserProfileData/{userId}",
