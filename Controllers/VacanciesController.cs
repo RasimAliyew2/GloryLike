@@ -15,6 +15,43 @@ public sealed class VacanciesController : ControllerBase
         _vacancyService = vacancyService;
     }
 
+    [HttpGet("employer/{employerUserId:int}")]
+    [ProducesResponseType(
+        typeof(EmployerVacancyListResponse),
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(EmployerVacancyListResponse),
+        StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<EmployerVacancyListResponse>>
+        GetEmployerVacancies(
+            int employerUserId,
+            CancellationToken cancellationToken)
+    {
+        if (employerUserId <= 0)
+        {
+            return BadRequest(new EmployerVacancyListResponse
+            {
+                Success = false,
+                Message = "Employer user ID düzgün deyil.",
+                EmployerUserId = employerUserId
+            });
+        }
+
+        var vacancies = await _vacancyService.GetEmployerVacanciesAsync(
+            employerUserId,
+            cancellationToken);
+
+        return Ok(new EmployerVacancyListResponse
+        {
+            Success = true,
+            Message = vacancies.Count == 0
+                ? "Employer üçün vacancy tapılmadı."
+                : $"{vacancies.Count} vacancy tapıldı.",
+            EmployerUserId = employerUserId,
+            Vacancies = vacancies
+        });
+    }
+
     [HttpPost]
     [ProducesResponseType(
         typeof(CreateVacancyResponse),

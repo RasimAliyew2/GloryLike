@@ -63,6 +63,35 @@ public sealed class VacancyService : IVacancyService
         _logger = logger;
     }
 
+    public async Task<List<EmployerVacancyListItemDto>>
+        GetEmployerVacanciesAsync(
+            int employerUserId,
+            CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.Vacancies
+            .AsNoTracking()
+            .Where(vacancy => vacancy.EmployerUserId == employerUserId)
+            .OrderByDescending(vacancy => vacancy.CreatedAtUtc)
+            .Select(vacancy => new EmployerVacancyListItemDto
+            {
+                VacancyId = vacancy.Id,
+                PlatformVacancyId = vacancy.PlatformVacancyId,
+                RoleTitle = vacancy.RoleTitle,
+                JobFamilyName = vacancy.JobFamilyName,
+                PositionName = vacancy.PositionName,
+                Status = vacancy.Status,
+
+                // Candidate application aggregate hələ mövcud deyil.
+                // Cədvəl əlavə olunanda bu projection COUNT ilə əvəz ediləcək.
+                CandidateCount = 0,
+                PublishDate = vacancy.PublishDate,
+                ApplicationDeadline = vacancy.ApplicationDeadline,
+                CreatedAtUtc = vacancy.CreatedAtUtc,
+                UpdatedAtUtc = vacancy.UpdatedAtUtc
+            })
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<CreateVacancyResult> CreateAsync(
         CreateVacancyRequest request,
         CancellationToken cancellationToken = default)

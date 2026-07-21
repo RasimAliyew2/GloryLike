@@ -384,6 +384,41 @@
     ]
   },
   {
+    "ContainingType": "GloryLikeBackend.Controllers.VacanciesController",
+    "Method": "GetEmployerVacancies",
+    "RelativePath": "api/Vacancies/employer/{employerUserId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "employerUserId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.EmployerVacancyListResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      },
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.EmployerVacancyListResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 400
+      }
+    ]
+  },
+  {
     "ContainingType": "Program\u002B\u003C\u003Ec",
     "Method": "\u003C\u003CMain\u003E$\u003Eb__0_1",
     "RelativePath": "db-test",

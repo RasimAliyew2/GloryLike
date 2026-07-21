@@ -4,6 +4,10 @@ namespace GloryLikeBackend.Services.Interfaces;
 
 public interface IVacancyService
 {
+    Task<List<EmployerVacancyListItemDto>> GetEmployerVacanciesAsync(
+        int employerUserId,
+        CancellationToken cancellationToken = default);
+
     Task<CreateVacancyResult> CreateAsync(
         CreateVacancyRequest request,
         CancellationToken cancellationToken = default);
