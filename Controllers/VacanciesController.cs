@@ -141,6 +141,91 @@ public sealed class VacanciesController : ControllerBase
         });
     }
 
+    [HttpGet("employer/{employerUserId:int}/{vacancyId:int}")]
+    [ProducesResponseType(
+        typeof(EmployerVacancyDetailResponse),
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(EmployerVacancyDetailResponse),
+        StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(
+        typeof(EmployerVacancyDetailResponse),
+        StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<EmployerVacancyDetailResponse>>
+        GetEmployerVacancyDetail(
+            int employerUserId,
+            int vacancyId,
+            CancellationToken cancellationToken)
+    {
+        if (employerUserId <= 0 || vacancyId <= 0)
+        {
+            return BadRequest(new EmployerVacancyDetailResponse
+            {
+                Success = false,
+                Message = "Employer və vacancy ID düzgün deyil.",
+                EmployerUserId = employerUserId
+            });
+        }
+
+        var response = await _vacancyService.GetEmployerVacancyDetailAsync(
+            employerUserId,
+            vacancyId,
+            cancellationToken);
+
+        if (response is null)
+        {
+            return NotFound(new EmployerVacancyDetailResponse
+            {
+                Success = false,
+                Message = "Vacancy tapılmadı və ya bu employer-ə aid deyil.",
+                EmployerUserId = employerUserId
+            });
+        }
+
+        return Ok(response);
+    }
+
+    [HttpPost("{vacancyId:int}/employer-status/toggle")]
+    [ProducesResponseType(
+        typeof(ToggleEmployerVacancyStatusResponse),
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(ToggleEmployerVacancyStatusResponse),
+        StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(
+        typeof(ToggleEmployerVacancyStatusResponse),
+        StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ToggleEmployerVacancyStatusResponse>>
+        ToggleEmployerStatus(
+            int vacancyId,
+            [FromBody] ToggleEmployerVacancyStatusRequest request,
+            CancellationToken cancellationToken)
+    {
+        var result = await _vacancyService.ToggleEmployerStatusAsync(
+            request.EmployerUserId,
+            vacancyId,
+            cancellationToken);
+
+        var response = new ToggleEmployerVacancyStatusResponse
+        {
+            Success = result.Success,
+            Message = result.Message,
+            VacancyId = result.VacancyId,
+            EmployerUserId = result.EmployerUserId,
+            Status = result.Status,
+            IsSuspended = result.IsSuspended,
+            UpdatedAtUtc = result.UpdatedAtUtc
+        };
+
+        if (result.Success)
+            return Ok(response);
+
+        return result.FailureKind
+            == ToggleEmployerVacancyStatusFailureKind.NotFound
+                ? NotFound(response)
+                : BadRequest(response);
+    }
+
     [HttpPost]
     [ProducesResponseType(
         typeof(CreateVacancyResponse),

@@ -385,6 +385,157 @@
   },
   {
     "ContainingType": "GloryLikeBackend.Controllers.VacanciesController",
+    "Method": "Apply",
+    "RelativePath": "api/Vacancies/{vacancyId}/applications",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "vacancyId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "GloryLikeBackend.Dtos.Vacancies.ApplyToVacancyRequest",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.ApplyToVacancyResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 201
+      },
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.ApplyToVacancyResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      },
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.ApplyToVacancyResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 400
+      },
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.ApplyToVacancyResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 404
+      }
+    ]
+  },
+  {
+    "ContainingType": "GloryLikeBackend.Controllers.VacanciesController",
+    "Method": "ToggleEmployerStatus",
+    "RelativePath": "api/Vacancies/{vacancyId}/employer-status/toggle",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "vacancyId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "request",
+        "Type": "GloryLikeBackend.Dtos.Vacancies.ToggleEmployerVacancyStatusRequest",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.ToggleEmployerVacancyStatusResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      },
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.ToggleEmployerVacancyStatusResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 400
+      },
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.ToggleEmployerVacancyStatusResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 404
+      }
+    ]
+  },
+  {
+    "ContainingType": "GloryLikeBackend.Controllers.VacanciesController",
+    "Method": "GetCandidateVacancies",
+    "RelativePath": "api/Vacancies/candidate/{candidateUserId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "candidateUserId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.CandidateVacancyListResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      },
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.CandidateVacancyListResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 400
+      },
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.CandidateVacancyListResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 404
+      }
+    ]
+  },
+  {
+    "ContainingType": "GloryLikeBackend.Controllers.VacanciesController",
     "Method": "GetEmployerVacancies",
     "RelativePath": "api/Vacancies/employer/{employerUserId}",
     "HttpMethod": "GET",
@@ -415,6 +566,55 @@
           "text/json"
         ],
         "StatusCode": 400
+      }
+    ]
+  },
+  {
+    "ContainingType": "GloryLikeBackend.Controllers.VacanciesController",
+    "Method": "GetEmployerVacancyDetail",
+    "RelativePath": "api/Vacancies/employer/{employerUserId}/{vacancyId}",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "employerUserId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      },
+      {
+        "Name": "vacancyId",
+        "Type": "System.Int32",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.EmployerVacancyDetailResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      },
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.EmployerVacancyDetailResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 400
+      },
+      {
+        "Type": "GloryLikeBackend.Dtos.Vacancies.EmployerVacancyDetailResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 404
       }
     ]
   },

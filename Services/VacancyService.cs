@@ -225,6 +225,227 @@ public sealed class VacancyService : IVacancyService
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<EmployerVacancyDetailResponse?>
+        GetEmployerVacancyDetailAsync(
+            int employerUserId,
+            int vacancyId,
+            CancellationToken cancellationToken = default)
+    {
+        if (employerUserId <= 0 || vacancyId <= 0)
+            return null;
+
+        var vacancy = await _dbContext.Vacancies
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(item => item.SkillRequirements)
+            .Include(item => item.FunnelStages)
+            .Include(item => item.Applications)
+            .FirstOrDefaultAsync(
+                item =>
+                    item.Id == vacancyId
+                    && item.EmployerUserId == employerUserId,
+                cancellationToken);
+
+        if (vacancy is null)
+            return null;
+
+        var candidateIds = vacancy.Applications
+            .Select(application => application.CandidateUserId)
+            .Distinct()
+            .ToList();
+
+        var usersById = candidateIds.Count == 0
+            ? new Dictionary<int, User>()
+            : await _dbContext.Users
+                .AsNoTracking()
+                .Where(user => candidateIds.Contains(user.Id))
+                .ToDictionaryAsync(user => user.Id, cancellationToken);
+
+        var candidateSkills = candidateIds.Count == 0
+            ? new List<UserSkill>()
+            : await _dbContext.UserSkills
+                .AsNoTracking()
+                .Where(skill => candidateIds.Contains(skill.UserId))
+                .ToListAsync(cancellationToken);
+
+        var skillsByCandidate = candidateSkills
+            .GroupBy(skill => skill.UserId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.ToList());
+
+        var applicants = new List<EmployerVacancyApplicantDto>();
+
+        foreach (var application in vacancy.Applications)
+        {
+            var skills = skillsByCandidate.TryGetValue(
+                application.CandidateUserId,
+                out var savedSkills)
+                ? savedSkills
+                : new List<UserSkill>();
+            var candidateScoreMap = BuildCandidateScoreMap(skills);
+            var templateSkills = BuildCandidateVacancyTemplate(
+                vacancy,
+                candidateScoreMap);
+            var score = CalculateCandidateVacancyReadiness(
+                templateSkills,
+                candidateScoreMap);
+
+            applicants.Add(new EmployerVacancyApplicantDto
+            {
+                ApplicationId = application.Id,
+                CandidateUserId = application.CandidateUserId,
+                CandidateName = usersById.TryGetValue(
+                    application.CandidateUserId,
+                    out var candidate)
+                    ? BuildCandidateDisplayName(candidate)
+                    : $"Candidate #{application.CandidateUserId}",
+                CurrentRole = ResolveCandidateRole(
+                    skills,
+                    vacancy.JobFamilyId,
+                    vacancy.JobFamilyName),
+                MatchScore = score,
+                ApplicationStatus = application.Status,
+                AppliedAtUtc = application.AppliedAtUtc,
+                MatchedSkills = templateSkills
+                    .Where(skill => skill.IsMatched)
+                    .Select(skill => skill.SkillName)
+                    .ToList(),
+                MissingSkills = templateSkills
+                    .Where(skill => !skill.IsMatched)
+                    .Select(skill => skill.SkillName)
+                    .ToList()
+            });
+        }
+
+        applicants = applicants
+            .OrderByDescending(applicant => applicant.MatchScore)
+            .ThenBy(applicant => applicant.AppliedAtUtc)
+            .ThenBy(applicant => applicant.CandidateName)
+            .ToList();
+
+        var detail = new EmployerVacancyDetailDto
+        {
+            VacancyId = vacancy.Id,
+            PlatformVacancyId = vacancy.PlatformVacancyId,
+            EmployerUserId = vacancy.EmployerUserId,
+            JobFamilyId = vacancy.JobFamilyId,
+            JobFamilyName = vacancy.JobFamilyName,
+            SeniorityName = vacancy.SeniorityName,
+            PositionName = vacancy.PositionName,
+            RoleTitle = vacancy.RoleTitle,
+            EmploymentType = vacancy.EmploymentType,
+            JobDescription = vacancy.JobDescription,
+            Visibility = vacancy.Visibility,
+            Status = vacancy.Status,
+            PublishDate = vacancy.PublishDate,
+            ApplicationDeadline = vacancy.ApplicationDeadline,
+            CreatedAtUtc = vacancy.CreatedAtUtc,
+            UpdatedAtUtc = vacancy.UpdatedAtUtc,
+            ApplicantCount = applicants.Count,
+            AverageMatchScore = applicants.Count == 0
+                ? 0
+                : RoundHalfUp(applicants.Average(item => item.MatchScore)),
+            HighConfidenceCount = applicants.Count(
+                applicant => applicant.MatchScore >= 60),
+            BestMatch = applicants.FirstOrDefault(),
+            Applicants = applicants,
+            Skills = vacancy.SkillRequirements
+                .OrderBy(skill => skill.SortOrder)
+                .Select(skill => new EmployerVacancySkillDto
+                {
+                    SkillId = skill.SkillId,
+                    SkillName = skill.SkillName,
+                    Weight = skill.MinimumVerificationLevel,
+                    RequirementType = skill.RequirementType
+                })
+                .ToList(),
+            FunnelStages = vacancy.FunnelStages
+                .OrderBy(stage => stage.SortOrder)
+                .Select(stage => new EmployerVacancyFunnelStageDto
+                {
+                    StageName = stage.StageName,
+                    Hours = stage.Hours,
+                    IsStandard = stage.IsStandard,
+                    SortOrder = stage.SortOrder
+                })
+                .ToList()
+        };
+
+        return new EmployerVacancyDetailResponse
+        {
+            Success = true,
+            Message = applicants.Count == 0
+                ? "Vacancy tapıldı, hələ müraciət edən candidate yoxdur."
+                : $"Vacancy və {applicants.Count} müraciət yükləndi.",
+            EmployerUserId = employerUserId,
+            Vacancy = detail
+        };
+    }
+
+    public async Task<ToggleEmployerVacancyStatusResult>
+        ToggleEmployerStatusAsync(
+            int employerUserId,
+            int vacancyId,
+            CancellationToken cancellationToken = default)
+    {
+        if (employerUserId <= 0 || vacancyId <= 0)
+        {
+            return ToggleEmployerVacancyStatusResult.Invalid(
+                employerUserId,
+                vacancyId,
+                "Employer və vacancy ID düzgün olmalıdır.");
+        }
+
+        var vacancy = await _dbContext.Vacancies
+            .FirstOrDefaultAsync(
+                item =>
+                    item.Id == vacancyId
+                    && item.EmployerUserId == employerUserId,
+                cancellationToken);
+
+        if (vacancy is null)
+        {
+            return ToggleEmployerVacancyStatusResult.NotFound(
+                employerUserId,
+                vacancyId,
+                "Vacancy tapılmadı və ya bu employer-ə aid deyil.");
+        }
+
+        var normalizedStatus = vacancy.Status.Trim();
+
+        if (normalizedStatus.Equals(
+                "Suspended",
+                StringComparison.OrdinalIgnoreCase)
+            || normalizedStatus.Equals(
+                "Paused",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            vacancy.Status = "Active";
+        }
+        else if (normalizedStatus.Equals(
+                     "Published",
+                     StringComparison.OrdinalIgnoreCase)
+                 || normalizedStatus.Equals(
+                     "Active",
+                     StringComparison.OrdinalIgnoreCase))
+        {
+            vacancy.Status = "Suspended";
+        }
+        else
+        {
+            return ToggleEmployerVacancyStatusResult.Invalid(
+                employerUserId,
+                vacancyId,
+                $"{vacancy.Status} statuslu vacancy dayandırıla və ya davam etdirilə bilməz.");
+        }
+
+        vacancy.UpdatedAtUtc = DateTime.UtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return ToggleEmployerVacancyStatusResult.Updated(vacancy);
+    }
+
     public async Task<ApplyToVacancyResult> ApplyToVacancyAsync(
         int vacancyId,
         int candidateUserId,
@@ -691,6 +912,60 @@ public sealed class VacancyService : IVacancyService
                 ? $"Employer #{user.Id}"
                 : user.UserName.Trim()
             : fullName;
+    }
+
+    private static string ResolveCandidateRole(
+        IReadOnlyCollection<UserSkill> skills,
+        int jobFamilyId,
+        string fallbackJobFamilyName)
+    {
+        var representative = skills
+            .Where(skill => skill.JobFamilyId == jobFamilyId)
+            .OrderByDescending(GetCandidateSkillSignal)
+            .ThenBy(skill => skill.SkillName)
+            .FirstOrDefault();
+
+        if (representative is null)
+        {
+            return string.IsNullOrWhiteSpace(fallbackJobFamilyName)
+                ? "Candidate"
+                : fallbackJobFamilyName.Trim();
+        }
+
+        var role = string.Join(
+            " · ",
+            new[]
+            {
+                representative.SeniorityName,
+                representative.PositionName
+            }.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+        if (!string.IsNullOrWhiteSpace(role))
+            return role;
+
+        return string.IsNullOrWhiteSpace(representative.JobFamilyName)
+            ? "Candidate"
+            : representative.JobFamilyName.Trim();
+    }
+
+    private static string BuildCandidateDisplayName(User user)
+    {
+        var fullName = string.Join(
+            " ",
+            new[] { user.Name, user.Surname }
+                .Where(value => !string.IsNullOrWhiteSpace(value)));
+
+        return string.IsNullOrWhiteSpace(fullName)
+            ? string.IsNullOrWhiteSpace(user.UserName)
+                ? $"Candidate #{user.Id}"
+                : user.UserName.Trim()
+            : fullName;
+    }
+
+    private static int RoundHalfUp(double value)
+    {
+        return (int)Math.Floor(
+            Math.Clamp(value, 0d, 100d) + 0.5d);
     }
 
     private static string NormalizeSkillName(string value)
