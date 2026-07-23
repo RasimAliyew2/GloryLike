@@ -18,6 +18,11 @@ public interface IVacancyService
         int vacancyId,
         CancellationToken cancellationToken = default);
 
+    Task<EmployerVacancyEditResponse?> GetEmployerVacancyForEditAsync(
+        int employerUserId,
+        int vacancyId,
+        CancellationToken cancellationToken = default);
+
     Task<ToggleEmployerVacancyStatusResult> ToggleEmployerStatusAsync(
         int employerUserId,
         int vacancyId,
@@ -29,6 +34,11 @@ public interface IVacancyService
         CancellationToken cancellationToken = default);
 
     Task<CreateVacancyResult> CreateAsync(
+        CreateVacancyRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<UpdateVacancyResult> UpdateAsync(
+        int vacancyId,
         CreateVacancyRequest request,
         CancellationToken cancellationToken = default);
 }
@@ -247,6 +257,92 @@ public sealed class CreateVacancyResult
         {
             Success = false,
             Message = message,
+            FailureKind = failureKind
+        };
+    }
+}
+
+public enum UpdateVacancyFailureKind
+{
+    None = 0,
+    Validation = 1,
+    NotFound = 2,
+    Conflict = 3
+}
+
+public sealed class UpdateVacancyResult
+{
+    public bool Success { get; private set; }
+    public string Message { get; private set; } = string.Empty;
+    public int VacancyId { get; private set; }
+    public int EmployerUserId { get; private set; }
+    public string PlatformVacancyId { get; private set; } = string.Empty;
+    public string Status { get; private set; } = string.Empty;
+    public DateTime? UpdatedAtUtc { get; private set; }
+    public UpdateVacancyFailureKind FailureKind { get; private set; }
+
+    public static UpdateVacancyResult Updated(Vacancy vacancy)
+    {
+        return new UpdateVacancyResult
+        {
+            Success = true,
+            Message = "Vacancy dəyişiklikləri SQL-də saxlanıldı.",
+            VacancyId = vacancy.Id,
+            EmployerUserId = vacancy.EmployerUserId,
+            PlatformVacancyId = vacancy.PlatformVacancyId,
+            Status = vacancy.Status,
+            UpdatedAtUtc = vacancy.UpdatedAtUtc
+        };
+    }
+
+    public static UpdateVacancyResult Invalid(
+        int employerUserId,
+        int vacancyId,
+        string message)
+    {
+        return Failed(
+            employerUserId,
+            vacancyId,
+            message,
+            UpdateVacancyFailureKind.Validation);
+    }
+
+    public static UpdateVacancyResult NotFound(
+        int employerUserId,
+        int vacancyId,
+        string message)
+    {
+        return Failed(
+            employerUserId,
+            vacancyId,
+            message,
+            UpdateVacancyFailureKind.NotFound);
+    }
+
+    public static UpdateVacancyResult Conflict(
+        int employerUserId,
+        int vacancyId,
+        string message)
+    {
+        return Failed(
+            employerUserId,
+            vacancyId,
+            message,
+            UpdateVacancyFailureKind.Conflict);
+    }
+
+    private static UpdateVacancyResult Failed(
+        int employerUserId,
+        int vacancyId,
+        string message,
+        UpdateVacancyFailureKind failureKind)
+    {
+        return new UpdateVacancyResult
+        {
+            Success = false,
+            Message = message,
+            VacancyId = vacancyId,
+            EmployerUserId = employerUserId,
             FailureKind = failureKind
         };
     }

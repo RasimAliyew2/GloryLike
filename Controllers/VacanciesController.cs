@@ -185,6 +185,52 @@ public sealed class VacanciesController : ControllerBase
         return Ok(response);
     }
 
+    [HttpGet("employer/{employerUserId:int}/{vacancyId:int}/edit")]
+    [ProducesResponseType(
+        typeof(EmployerVacancyEditResponse),
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(EmployerVacancyEditResponse),
+        StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(
+        typeof(EmployerVacancyEditResponse),
+        StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<EmployerVacancyEditResponse>>
+        GetEmployerVacancyForEdit(
+            int employerUserId,
+            int vacancyId,
+            CancellationToken cancellationToken)
+    {
+        if (employerUserId <= 0 || vacancyId <= 0)
+        {
+            return BadRequest(new EmployerVacancyEditResponse
+            {
+                Success = false,
+                Message = "Employer və vacancy ID düzgün deyil.",
+                EmployerUserId = employerUserId,
+                VacancyId = vacancyId
+            });
+        }
+
+        var response = await _vacancyService.GetEmployerVacancyForEditAsync(
+            employerUserId,
+            vacancyId,
+            cancellationToken);
+
+        if (response is null)
+        {
+            return NotFound(new EmployerVacancyEditResponse
+            {
+                Success = false,
+                Message = "Vacancy tapılmadı və ya bu employer-ə aid deyil.",
+                EmployerUserId = employerUserId,
+                VacancyId = vacancyId
+            });
+        }
+
+        return Ok(response);
+    }
+
     [HttpPost("{vacancyId:int}/employer-status/toggle")]
     [ProducesResponseType(
         typeof(ToggleEmployerVacancyStatusResponse),
@@ -264,5 +310,50 @@ public sealed class VacanciesController : ControllerBase
             == CreateVacancyFailureKind.Conflict
                 ? Conflict(response)
                 : BadRequest(response);
+    }
+
+    [HttpPut("{vacancyId:int}")]
+    [ProducesResponseType(
+        typeof(UpdateVacancyResponse),
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(UpdateVacancyResponse),
+        StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(
+        typeof(UpdateVacancyResponse),
+        StatusCodes.Status404NotFound)]
+    [ProducesResponseType(
+        typeof(UpdateVacancyResponse),
+        StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<UpdateVacancyResponse>> Update(
+        int vacancyId,
+        [FromBody] CreateVacancyRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _vacancyService.UpdateAsync(
+            vacancyId,
+            request,
+            cancellationToken);
+
+        var response = new UpdateVacancyResponse
+        {
+            Success = result.Success,
+            Message = result.Message,
+            VacancyId = result.VacancyId,
+            EmployerUserId = result.EmployerUserId,
+            PlatformVacancyId = result.PlatformVacancyId,
+            Status = result.Status,
+            UpdatedAtUtc = result.UpdatedAtUtc
+        };
+
+        if (result.Success)
+            return Ok(response);
+
+        return result.FailureKind switch
+        {
+            UpdateVacancyFailureKind.NotFound => NotFound(response),
+            UpdateVacancyFailureKind.Conflict => Conflict(response),
+            _ => BadRequest(response)
+        };
     }
 }

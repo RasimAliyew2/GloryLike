@@ -383,6 +383,44 @@ public sealed class VacancyService : IVacancyService
         };
     }
 
+    public async Task<EmployerVacancyEditResponse?>
+        GetEmployerVacancyForEditAsync(
+            int employerUserId,
+            int vacancyId,
+            CancellationToken cancellationToken = default)
+    {
+        if (employerUserId <= 0 || vacancyId <= 0)
+            return null;
+
+        var vacancy = await _dbContext.Vacancies
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(item => item.SkillRequirements)
+            .Include(item => item.Benefits)
+            .Include(item => item.ApplicationRequirements)
+            .Include(item => item.ScreeningQuestions)
+            .Include(item => item.FunnelStages)
+            .Include(item => item.PublicationChannels)
+            .FirstOrDefaultAsync(
+                item =>
+                    item.Id == vacancyId
+                    && item.EmployerUserId == employerUserId,
+                cancellationToken);
+
+        if (vacancy is null)
+            return null;
+
+        return new EmployerVacancyEditResponse
+        {
+            Success = true,
+            Message = "Vacancy edit məlumatları SQL-dən yükləndi.",
+            EmployerUserId = employerUserId,
+            VacancyId = vacancy.Id,
+            Status = vacancy.Status,
+            Vacancy = MapVacancyToEditPayload(vacancy)
+        };
+    }
+
     public async Task<ToggleEmployerVacancyStatusResult>
         ToggleEmployerStatusAsync(
             int employerUserId,
@@ -771,6 +809,162 @@ public sealed class VacancyService : IVacancyService
             vacancy.Id,
             vacancy.PlatformVacancyId,
             vacancy.CreatedAtUtc);
+    }
+
+    public async Task<UpdateVacancyResult> UpdateAsync(
+        int vacancyId,
+        CreateVacancyRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (vacancyId <= 0 || request.EmployerUserId <= 0)
+        {
+            return UpdateVacancyResult.Invalid(
+                request.EmployerUserId,
+                vacancyId,
+                "Employer və vacancy ID düzgün olmalıdır.");
+        }
+
+        var payload = request.Vacancy ?? new CreateVacancyPayload();
+        Normalize(payload);
+
+        var payloadValidationMessage = ValidatePayload(payload);
+
+        if (!string.IsNullOrWhiteSpace(payloadValidationMessage))
+        {
+            return UpdateVacancyResult.Invalid(
+                request.EmployerUserId,
+                vacancyId,
+                payloadValidationMessage);
+        }
+
+        var vacancy = await _dbContext.Vacancies
+            .AsSplitQuery()
+            .Include(item => item.SkillRequirements)
+            .Include(item => item.Benefits)
+            .Include(item => item.ApplicationRequirements)
+            .Include(item => item.ScreeningQuestions)
+            .Include(item => item.FunnelStages)
+            .Include(item => item.PublicationChannels)
+            .FirstOrDefaultAsync(
+                item =>
+                    item.Id == vacancyId
+                    && item.EmployerUserId == request.EmployerUserId,
+                cancellationToken);
+
+        if (vacancy is null)
+        {
+            return UpdateVacancyResult.NotFound(
+                request.EmployerUserId,
+                vacancyId,
+                "Vacancy tapılmadı və ya bu employer-ə aid deyil.");
+        }
+
+        if (!payload.PlatformVacancyId.Equals(
+                vacancy.PlatformVacancyId,
+                StringComparison.Ordinal))
+        {
+            return UpdateVacancyResult.Invalid(
+                request.EmployerUserId,
+                vacancyId,
+                "Platform Vacancy ID dəyişdirilə bilməz.");
+        }
+
+        var jobFamily = await _dbContext.JobFamilies
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                item => item.Id == payload.JobFamilyId,
+                cancellationToken);
+
+        if (jobFamily is null)
+        {
+            return UpdateVacancyResult.Invalid(
+                request.EmployerUserId,
+                vacancyId,
+                "Seçilən Job Family SQL taxonomy-də tapılmadı.");
+        }
+
+        var seniority = await _dbContext.Seniorities
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                item =>
+                    item.Id == payload.SeniorityId
+                    && item.JobFamilyId == payload.JobFamilyId,
+                cancellationToken);
+
+        if (seniority is null)
+        {
+            return UpdateVacancyResult.Invalid(
+                request.EmployerUserId,
+                vacancyId,
+                "Seçilən Seniority bu Job Family-yə aid deyil.");
+        }
+
+        var position = await _dbContext.Positions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                item =>
+                    item.Id == payload.PositionId
+                    && item.SeniorityId == payload.SeniorityId,
+                cancellationToken);
+
+        if (position is null)
+        {
+            return UpdateVacancyResult.Invalid(
+                request.EmployerUserId,
+                vacancyId,
+                "Seçilən Position bu Seniority-yə aid deyil.");
+        }
+
+        var requestedSkillIds = payload.SkillRequirements
+            .Select(requirement => requirement.SkillId)
+            .ToList();
+
+        var skillsById = await _dbContext.Skills
+            .AsNoTracking()
+            .Where(skill => requestedSkillIds.Contains(skill.Id))
+            .ToDictionaryAsync(
+                skill => skill.Id,
+                cancellationToken);
+
+        var missingSkillId = requestedSkillIds
+            .FirstOrDefault(skillId => !skillsById.ContainsKey(skillId));
+
+        if (missingSkillId > 0)
+        {
+            return UpdateVacancyResult.Invalid(
+                request.EmployerUserId,
+                vacancyId,
+                $"SkillId {missingSkillId} SQL taxonomy-də tapılmadı.");
+        }
+
+        ApplyEditableValues(
+            vacancy,
+            payload,
+            jobFamily,
+            seniority,
+            position);
+
+        ReplaceEditableCollections(
+            vacancy,
+            payload,
+            skillsById);
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception)
+        {
+            _logger.LogError(
+                exception,
+                "Vacancy {VacancyId}/{PlatformVacancyId} SQL-də update edilmədi.",
+                vacancy.Id,
+                vacancy.PlatformVacancyId);
+
+            throw;
+        }
+
+        return UpdateVacancyResult.Updated(vacancy);
     }
 
     private static CandidateScoreMap BuildCandidateScoreMap(
@@ -1288,6 +1482,327 @@ public sealed class VacancyService : IVacancyService
         yield return requirements.PersonalWebsite;
         yield return requirements.CoverLetter;
         yield return requirements.AdditionalFiles;
+    }
+
+    private static CreateVacancyPayload MapVacancyToEditPayload(
+        Vacancy vacancy)
+    {
+        var standardRequirements = vacancy.ApplicationRequirements
+            .Where(item => !item.IsCustom)
+            .ToDictionary(
+                item => item.FieldKey,
+                item => item,
+                StringComparer.OrdinalIgnoreCase);
+
+        var channels = vacancy.PublicationChannels
+            .ToDictionary(
+                item => item.ChannelName,
+                item => item.IsEnabled,
+                StringComparer.OrdinalIgnoreCase);
+
+        return new CreateVacancyPayload
+        {
+            JobFamilyId = vacancy.JobFamilyId,
+            SeniorityId = vacancy.SeniorityId,
+            PositionId = vacancy.PositionId,
+            RoleTitle = vacancy.RoleTitle,
+            PlatformVacancyId = vacancy.PlatformVacancyId,
+            ClientRequisitionCode = vacancy.ClientRequisitionCode,
+            EmploymentType = vacancy.EmploymentType,
+            ExperienceRequired = vacancy.ExperienceRequired,
+            EducationRequirement = vacancy.EducationRequirement,
+            EducationLevel = vacancy.EducationLevel,
+            MinSalary = vacancy.MinSalary,
+            MaxSalary = vacancy.MaxSalary,
+            PaymentTerms = vacancy.PaymentTerms,
+            Currency = vacancy.Currency,
+            HideSalary = vacancy.HideSalary,
+            JobDescription = vacancy.JobDescription,
+            SkillRequirements = vacancy.SkillRequirements
+                .OrderBy(item => item.SortOrder)
+                .Select(item => new CreateVacancySkillRequirementRequest
+                {
+                    SkillId = item.SkillId,
+                    MinimumVerificationLevel =
+                        item.MinimumVerificationLevel,
+                    RequirementType = item.RequirementType
+                })
+                .ToList(),
+            SelectedSkillIds = vacancy.SkillRequirements
+                .OrderBy(item => item.SortOrder)
+                .Select(item => item.SkillId)
+                .ToList(),
+            MinimumVerificationLevel = vacancy.MinimumVerificationLevel,
+            Benefits = vacancy.Benefits
+                .OrderBy(item => item.SortOrder)
+                .Select(item => item.Name)
+                .ToList(),
+            ApplicationRequirements = new
+                CreateVacancyApplicationRequirementsRequest
+                {
+                    FullName = GetRequirementMode(
+                        standardRequirements,
+                        "fullName",
+                        ApplicationRequirementModeRequest.Required),
+                    Email = GetRequirementMode(
+                        standardRequirements,
+                        "email",
+                        ApplicationRequirementModeRequest.Required),
+                    Phone = GetRequirementMode(
+                        standardRequirements,
+                        "phone",
+                        ApplicationRequirementModeRequest.Optional),
+                    Location = GetRequirementMode(
+                        standardRequirements,
+                        "location",
+                        ApplicationRequirementModeRequest.Optional),
+                    WorkExperience = GetRequirementMode(
+                        standardRequirements,
+                        "workExperience",
+                        ApplicationRequirementModeRequest.Required),
+                    CurrentPosition = GetRequirementMode(
+                        standardRequirements,
+                        "currentPosition",
+                        ApplicationRequirementModeRequest.Optional),
+                    PreviousCompanies = GetRequirementMode(
+                        standardRequirements,
+                        "previousCompanies",
+                        ApplicationRequirementModeRequest.Optional),
+                    Education = GetRequirementMode(
+                        standardRequirements,
+                        "education",
+                        ApplicationRequirementModeRequest.Optional),
+                    Certifications = GetRequirementMode(
+                        standardRequirements,
+                        "certifications",
+                        ApplicationRequirementModeRequest.Optional),
+                    Trainings = GetRequirementMode(
+                        standardRequirements,
+                        "trainings",
+                        ApplicationRequirementModeRequest.Hidden),
+                    Languages = GetRequirementMode(
+                        standardRequirements,
+                        "languages",
+                        ApplicationRequirementModeRequest.Optional),
+                    Tools = GetRequirementMode(
+                        standardRequirements,
+                        "tools",
+                        ApplicationRequirementModeRequest.Hidden),
+                    LinkedIn = GetRequirementMode(
+                        standardRequirements,
+                        "linkedIn",
+                        ApplicationRequirementModeRequest.Optional),
+                    GitHub = GetRequirementMode(
+                        standardRequirements,
+                        "gitHub",
+                        ApplicationRequirementModeRequest.Hidden),
+                    Portfolio = GetRequirementMode(
+                        standardRequirements,
+                        "portfolio",
+                        ApplicationRequirementModeRequest.Hidden),
+                    PersonalWebsite = GetRequirementMode(
+                        standardRequirements,
+                        "personalWebsite",
+                        ApplicationRequirementModeRequest.Hidden),
+                    CoverLetter = GetRequirementMode(
+                        standardRequirements,
+                        "coverLetter",
+                        ApplicationRequirementModeRequest.Optional),
+                    AdditionalFiles = GetRequirementMode(
+                        standardRequirements,
+                        "additionalFiles",
+                        ApplicationRequirementModeRequest.Hidden),
+                    CustomFields = vacancy.ApplicationRequirements
+                        .Where(item => item.IsCustom)
+                        .OrderBy(item => item.SortOrder)
+                        .Select(item => new CreateVacancyCustomFieldRequest
+                        {
+                            Label = item.Label,
+                            Requirement = ParseRequirementMode(
+                                item.RequirementMode,
+                                ApplicationRequirementModeRequest.Optional)
+                        })
+                        .ToList()
+                },
+            ScreeningQuestions = vacancy.ScreeningQuestions
+                .OrderBy(item => item.SortOrder)
+                .Select(item => new CreateVacancyScreeningQuestionRequest
+                {
+                    QuestionText = item.QuestionText,
+                    AnswerType = item.AnswerType,
+                    RequirementType = item.RequirementType
+                })
+                .ToList(),
+            MinimumMatchScore = vacancy.MinimumMatchScore,
+            MinimumTrustScore = vacancy.MinimumTrustScore,
+            AutoRejectBelowScore = vacancy.AutoRejectBelowScore,
+            RequireVerifiedCoreSkills = vacancy.RequireVerifiedCoreSkills,
+            ScreeningNotes = vacancy.ScreeningNotes,
+            FunnelStages = vacancy.FunnelStages
+                .OrderBy(item => item.SortOrder)
+                .Select(item => new CreateVacancyFunnelStageRequest
+                {
+                    StageName = item.StageName,
+                    Hours = item.Hours,
+                    IsStandard = item.IsStandard
+                })
+                .ToList(),
+            StageApplied = vacancy.StageApplied,
+            StageScreening = vacancy.StageScreening,
+            StageInterview = vacancy.StageInterview,
+            StageOffer = vacancy.StageOffer,
+            InterviewRounds = vacancy.InterviewRounds,
+            ScreeningSlaDays = vacancy.ScreeningSlaDays,
+            Visibility = vacancy.Visibility,
+            PublishDate = vacancy.PublishDate,
+            ApplicationDeadline = vacancy.ApplicationDeadline,
+            ContactEmail = vacancy.ContactEmail,
+            AllowInternalCandidates = vacancy.AllowInternalCandidates,
+            NotifyMatchingCandidates = vacancy.NotifyMatchingCandidates,
+            PublishOnSkillMatch = GetChannelEnabled(
+                channels,
+                "SkillMatch",
+                true),
+            PublishOnJobSearchAz = GetChannelEnabled(
+                channels,
+                "JobSearch.az"),
+            PublishOnPositionAz = GetChannelEnabled(
+                channels,
+                "Position.az"),
+            PublishOnBancoAz = GetChannelEnabled(
+                channels,
+                "Banco.az"),
+            PublishOnBusyAz = GetChannelEnabled(
+                channels,
+                "Busy.az"),
+            ShareOnTwitter = GetChannelEnabled(
+                channels,
+                "Twitter / X"),
+            ShareOnLinkedIn = GetChannelEnabled(
+                channels,
+                "LinkedIn"),
+            PublicationPriority = vacancy.PublicationPriority
+        };
+    }
+
+    private static ApplicationRequirementModeRequest GetRequirementMode(
+        IReadOnlyDictionary<string, VacancyApplicationRequirement> fields,
+        string fieldKey,
+        ApplicationRequirementModeRequest fallback)
+    {
+        return fields.TryGetValue(fieldKey, out var field)
+            ? ParseRequirementMode(field.RequirementMode, fallback)
+            : fallback;
+    }
+
+    private static ApplicationRequirementModeRequest ParseRequirementMode(
+        string? value,
+        ApplicationRequirementModeRequest fallback)
+    {
+        return Enum.TryParse<ApplicationRequirementModeRequest>(
+            value,
+            true,
+            out var parsed)
+            && Enum.IsDefined(parsed)
+                ? parsed
+                : fallback;
+    }
+
+    private static bool GetChannelEnabled(
+        IReadOnlyDictionary<string, bool> channels,
+        string channelName,
+        bool fallback = false)
+    {
+        return channels.TryGetValue(channelName, out var enabled)
+            ? enabled
+            : fallback;
+    }
+
+    private static void ApplyEditableValues(
+        Vacancy vacancy,
+        CreateVacancyPayload payload,
+        JobFamily jobFamily,
+        Seniority seniority,
+        Position position)
+    {
+        vacancy.JobFamilyId = payload.JobFamilyId;
+        vacancy.SeniorityId = payload.SeniorityId;
+        vacancy.PositionId = payload.PositionId;
+        vacancy.JobFamilyName = jobFamily.JobName.Trim();
+        vacancy.SeniorityName = seniority.Name.Trim();
+        vacancy.PositionName = position.Name.Trim();
+        vacancy.RoleTitle = payload.RoleTitle;
+        vacancy.ClientRequisitionCode = payload.ClientRequisitionCode;
+        vacancy.EmploymentType = payload.EmploymentType;
+        vacancy.ExperienceRequired = payload.ExperienceRequired;
+        vacancy.EducationRequirement = payload.EducationRequirement;
+        vacancy.EducationLevel = payload.EducationLevel;
+        vacancy.MinSalary = payload.MinSalary;
+        vacancy.MaxSalary = payload.MaxSalary;
+        vacancy.PaymentTerms = payload.PaymentTerms;
+        vacancy.Currency = payload.Currency;
+        vacancy.HideSalary = payload.HideSalary;
+        vacancy.JobDescription = payload.JobDescription;
+        vacancy.MinimumVerificationLevel =
+            payload.MinimumVerificationLevel;
+        vacancy.MinimumMatchScore = payload.MinimumMatchScore;
+        vacancy.MinimumTrustScore = payload.MinimumTrustScore;
+        vacancy.AutoRejectBelowScore = payload.AutoRejectBelowScore;
+        vacancy.RequireVerifiedCoreSkills =
+            payload.RequireVerifiedCoreSkills;
+        vacancy.ScreeningNotes = payload.ScreeningNotes;
+        vacancy.StageApplied = payload.StageApplied;
+        vacancy.StageScreening = payload.StageScreening;
+        vacancy.StageInterview = payload.StageInterview;
+        vacancy.StageOffer = payload.StageOffer;
+        vacancy.InterviewRounds = payload.InterviewRounds;
+        vacancy.ScreeningSlaDays = payload.ScreeningSlaDays;
+        vacancy.Visibility = payload.Visibility;
+        vacancy.PublishDate = payload.PublishDate;
+        vacancy.ApplicationDeadline = payload.ApplicationDeadline;
+        vacancy.ContactEmail = payload.ContactEmail;
+        vacancy.AllowInternalCandidates = payload.AllowInternalCandidates;
+        vacancy.NotifyMatchingCandidates =
+            payload.NotifyMatchingCandidates;
+        vacancy.PublicationPriority = payload.PublicationPriority;
+        vacancy.SourcePayloadJson = JsonSerializer.Serialize(
+            payload,
+            PayloadJsonOptions);
+        vacancy.UpdatedAtUtc = DateTime.UtcNow;
+    }
+
+    private void ReplaceEditableCollections(
+        Vacancy vacancy,
+        CreateVacancyPayload payload,
+        IReadOnlyDictionary<int, Skill> skillsById)
+    {
+        _dbContext.VacancySkillRequirements.RemoveRange(
+            vacancy.SkillRequirements);
+        _dbContext.VacancyBenefits.RemoveRange(vacancy.Benefits);
+        _dbContext.VacancyApplicationRequirements.RemoveRange(
+            vacancy.ApplicationRequirements);
+        _dbContext.VacancyScreeningQuestions.RemoveRange(
+            vacancy.ScreeningQuestions);
+        _dbContext.VacancyFunnelStages.RemoveRange(vacancy.FunnelStages);
+        _dbContext.VacancyPublicationChannels.RemoveRange(
+            vacancy.PublicationChannels);
+
+        vacancy.SkillRequirements = new List<VacancySkillRequirement>();
+        vacancy.Benefits = new List<VacancyBenefit>();
+        vacancy.ApplicationRequirements =
+            new List<VacancyApplicationRequirement>();
+        vacancy.ScreeningQuestions =
+            new List<VacancyScreeningQuestion>();
+        vacancy.FunnelStages = new List<VacancyFunnelStage>();
+        vacancy.PublicationChannels =
+            new List<VacancyPublicationChannel>();
+
+        AddSkillRequirements(vacancy, payload, skillsById);
+        AddBenefits(vacancy, payload);
+        AddApplicationRequirements(vacancy, payload);
+        AddScreeningQuestions(vacancy, payload);
+        AddFunnelStages(vacancy, payload);
+        AddPublicationChannels(vacancy, payload);
     }
 
     private static void AddSkillRequirements(
