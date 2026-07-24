@@ -1,4 +1,5 @@
 ﻿using GloryLikeBackend.Data;
+using GloryLikeBackend.Options;
 using GloryLikeBackend.Services;
 using GloryLikeBackend.Services.Interfaces;
 using Microsoft.Data.SqlClient;
@@ -23,6 +24,18 @@ builder.Services.AddScoped<IJobOfferService, JobOfferService>();
 builder.Services.AddScoped<IVacancyService, VacancyService>();
 builder.Services.AddScoped<ITalentRadarService, TalentRadarService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.Configure<OutlookMailOptions>(
+    builder.Configuration.GetSection(
+        OutlookMailOptions.SectionName));
+builder.Services.AddHttpClient<
+    IRegistrationEmailSender,
+    OutlookGraphRegistrationEmailSender>(
+        client =>
+        {
+            client.Timeout =
+                TimeSpan.FromSeconds(30);
+        });
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));

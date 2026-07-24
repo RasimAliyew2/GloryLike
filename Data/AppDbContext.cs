@@ -16,6 +16,12 @@ public class AppDbContext : DbContext
 
     public DbSet<User> Users { get; set; }
 
+    public DbSet<PendingEmailRegistration> PendingEmailRegistrations
+    {
+        get;
+        set;
+    }
+
     public DbSet<JobFamily> JobFamilies { get; set; }
 
     public DbSet<Seniority> Seniorities { get; set; }
@@ -84,8 +90,7 @@ public class AppDbContext : DbContext
                 .HasMaxLength(80);
 
             entity.Property(x => x.PhoneNumber)
-                .HasMaxLength(30)
-                .IsRequired();
+                .HasMaxLength(30);
 
             entity.Property(x => x.Email)
                 .HasMaxLength(150)
@@ -94,6 +99,20 @@ public class AppDbContext : DbContext
             entity.Property(x => x.PasswordHash)
                 .HasMaxLength(500)
                 .IsRequired();
+
+            entity.Property(x => x.AccountType)
+                .HasMaxLength(20)
+                .HasDefaultValue("candidate")
+                .IsRequired();
+
+            entity.Property(x => x.CompanyName)
+                .HasMaxLength(150);
+
+            entity.Property(x => x.CompanyType)
+                .HasMaxLength(30);
+
+            entity.Property(x => x.Industry)
+                .HasMaxLength(120);
 
             entity.Property(x => x.PasswordResetCodeHash)
                 .HasMaxLength(500);
@@ -104,11 +123,54 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(x => x.PhoneNumber)
                 .IsUnique()
+                .HasFilter("[PhoneNumber] IS NOT NULL")
                 .HasDatabaseName("UX_Users_PhoneNumber");
 
             entity.HasIndex(x => x.UserName)
                 .IsUnique()
                 .HasDatabaseName("UX_Users_UserName");
+        });
+
+        modelBuilder.Entity<PendingEmailRegistration>(entity =>
+        {
+            entity.ToTable("PendingEmailRegistrations");
+
+            entity.HasKey(item => item.Id);
+
+            entity.Property(item => item.Email)
+                .HasMaxLength(150)
+                .IsRequired();
+
+            entity.Property(item => item.PasswordHash)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.Property(item => item.ProfileName)
+                .HasMaxLength(150)
+                .IsRequired();
+
+            entity.Property(item => item.AccountType)
+                .HasMaxLength(20)
+                .IsRequired();
+
+            entity.Property(item => item.CompanyType)
+                .HasMaxLength(30);
+
+            entity.Property(item => item.Industry)
+                .HasMaxLength(120);
+
+            entity.Property(item => item.VerificationCodeHash)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.HasIndex(item => item.Email)
+                .IsUnique()
+                .HasDatabaseName(
+                    "UX_PendingEmailRegistrations_Email");
+
+            entity.HasIndex(item => item.VerificationCodeExpiresAtUtc)
+                .HasDatabaseName(
+                    "IX_PendingEmailRegistrations_ExpiresAtUtc");
         });
 
         modelBuilder.Entity<SkillQuestionnaire>(entity =>

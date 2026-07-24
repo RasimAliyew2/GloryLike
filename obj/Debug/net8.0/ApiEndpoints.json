@@ -79,6 +79,110 @@
   },
   {
     "ContainingType": "GloryLikeBackend.Controllers.AuthController",
+    "Method": "GetEmailRegistrationStatus",
+    "RelativePath": "api/Auth/register/email/{verificationId}/status",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "verificationId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "GloryLikeBackend.Dtos.Auth.EmailRegistrationResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "GloryLikeBackend.Controllers.AuthController",
+    "Method": "ResendEmailRegistrationCode",
+    "RelativePath": "api/Auth/register/email/resend",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "GloryLikeBackend.Dtos.Auth.ResendEmailRegistrationCodeRequest",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "GloryLikeBackend.Dtos.Auth.EmailRegistrationResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "GloryLikeBackend.Controllers.AuthController",
+    "Method": "StartEmailRegistration",
+    "RelativePath": "api/Auth/register/email/start",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "GloryLikeBackend.Dtos.Auth.StartEmailRegistrationRequest",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "GloryLikeBackend.Dtos.Auth.EmailRegistrationResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "GloryLikeBackend.Controllers.AuthController",
+    "Method": "VerifyEmailRegistration",
+    "RelativePath": "api/Auth/register/email/verify",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "GloryLikeBackend.Dtos.Auth.VerifyEmailRegistrationRequest",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "GloryLikeBackend.Dtos.Auth.EmailRegistrationResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "GloryLikeBackend.Controllers.AuthController",
     "Method": "ResetPassword",
     "RelativePath": "api/Auth/reset-password",
     "HttpMethod": "POST",
@@ -727,7 +831,7 @@
   },
   {
     "ContainingType": "Program\u002B\u003C\u003Ec",
-    "Method": "\u003C\u003CMain\u003E$\u003Eb__0_1",
+    "Method": "\u003C\u003CMain\u003E$\u003Eb__0_2",
     "RelativePath": "db-test",
     "HttpMethod": "GET",
     "IsController": false,

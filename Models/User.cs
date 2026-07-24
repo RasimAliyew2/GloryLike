@@ -12,11 +12,21 @@ public class User
 
     public string? FatherName { get; set; }
 
-    public string PhoneNumber { get; set; } = string.Empty;
+    public string? PhoneNumber { get; set; }
 
     public string Email { get; set; } = string.Empty;
 
     public string PasswordHash { get; set; } = string.Empty;
+
+    public string AccountType { get; set; } = "candidate";
+
+    public string? CompanyName { get; set; }
+
+    public string? CompanyType { get; set; }
+
+    public string? Industry { get; set; }
+
+    public DateTime? EmailVerifiedAtUtc { get; set; }
 
     public int Age { get; set; }
 

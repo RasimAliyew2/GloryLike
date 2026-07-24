@@ -13,4 +13,12 @@ public class AuthUserDto
     public string PhoneNumber { get; set; } = string.Empty;
 
     public string Email { get; set; } = string.Empty;
+
+    public string AccountType { get; set; } = string.Empty;
+
+    public string? CompanyName { get; set; }
+
+    public string? CompanyType { get; set; }
+
+    public string? Industry { get; set; }
 }

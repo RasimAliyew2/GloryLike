@@ -6,6 +6,22 @@ public interface IAuthService
 {
     Task<AuthResponse> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default);
 
+    Task<EmailRegistrationResponse> StartEmailRegistrationAsync(
+        StartEmailRegistrationRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<EmailRegistrationResponse> GetEmailRegistrationStatusAsync(
+        Guid verificationId,
+        CancellationToken cancellationToken = default);
+
+    Task<EmailRegistrationResponse> VerifyEmailRegistrationAsync(
+        VerifyEmailRegistrationRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<EmailRegistrationResponse> ResendEmailRegistrationCodeAsync(
+        ResendEmailRegistrationCodeRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default);
 
     Task<ForgotPasswordResponse> ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken cancellationToken = default);

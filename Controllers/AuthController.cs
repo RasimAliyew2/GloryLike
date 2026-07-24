@@ -42,6 +42,71 @@ public class AuthController : ControllerBase
         }
     }
 
+    [HttpPost("register/email/start")]
+    public async Task<ActionResult<EmailRegistrationResponse>>
+        StartEmailRegistration(
+            [FromBody] StartEmailRegistrationRequest request,
+            CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var result =
+            await _authService.StartEmailRegistrationAsync(
+                request,
+                cancellationToken);
+
+        return ToEmailRegistrationActionResult(result);
+    }
+
+    [HttpGet("register/email/{verificationId:guid}/status")]
+    public async Task<ActionResult<EmailRegistrationResponse>>
+        GetEmailRegistrationStatus(
+            Guid verificationId,
+            CancellationToken cancellationToken)
+    {
+        var result =
+            await _authService.GetEmailRegistrationStatusAsync(
+                verificationId,
+                cancellationToken);
+
+        return ToEmailRegistrationActionResult(result);
+    }
+
+    [HttpPost("register/email/verify")]
+    public async Task<ActionResult<EmailRegistrationResponse>>
+        VerifyEmailRegistration(
+            [FromBody] VerifyEmailRegistrationRequest request,
+            CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var result =
+            await _authService.VerifyEmailRegistrationAsync(
+                request,
+                cancellationToken);
+
+        return ToEmailRegistrationActionResult(result);
+    }
+
+    [HttpPost("register/email/resend")]
+    public async Task<ActionResult<EmailRegistrationResponse>>
+        ResendEmailRegistrationCode(
+            [FromBody] ResendEmailRegistrationCodeRequest request,
+            CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var result =
+            await _authService.ResendEmailRegistrationCodeAsync(
+                request,
+                cancellationToken);
+
+        return ToEmailRegistrationActionResult(result);
+    }
+
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login(
         [FromBody] LoginRequest request,
@@ -84,5 +149,36 @@ public class AuthController : ControllerBase
             return BadRequest(result);
 
         return Ok(result);
+    }
+
+    private ActionResult<EmailRegistrationResponse>
+        ToEmailRegistrationActionResult(
+            EmailRegistrationResponse result)
+    {
+        if (result.Success)
+            return Ok(result);
+
+        return result.ErrorCode switch
+        {
+            EmailRegistrationErrorCodes.DuplicateEmail
+                or EmailRegistrationErrorCodes.Conflict =>
+                    Conflict(result),
+
+            EmailRegistrationErrorCodes.NotFound =>
+                NotFound(result),
+
+            EmailRegistrationErrorCodes.ResendTooEarly
+                or EmailRegistrationErrorCodes.TooManyAttempts =>
+                    StatusCode(
+                        StatusCodes.Status429TooManyRequests,
+                        result),
+
+            EmailRegistrationErrorCodes.EmailDeliveryFailed =>
+                StatusCode(
+                    StatusCodes.Status503ServiceUnavailable,
+                    result),
+
+            _ => BadRequest(result)
+        };
     }
 }
