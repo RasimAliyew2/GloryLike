@@ -208,6 +208,84 @@
     ]
   },
   {
+    "ContainingType": "GloryLikeBackend.Controllers.CompanyTeamController",
+    "Method": "GetTeam",
+    "RelativePath": "api/company/team",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "ownerUserId",
+        "Type": "System.Int32",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "GloryLikeBackend.Dtos.CompanyTeam.CompanyTeamResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "GloryLikeBackend.Controllers.CompanyTeamController",
+    "Method": "Invite",
+    "RelativePath": "api/company/team/invitations",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "request",
+        "Type": "GloryLikeBackend.Dtos.CompanyTeam.InviteCompanyTeamMemberRequest",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "GloryLikeBackend.Dtos.CompanyTeam.CompanyTeamResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "GloryLikeBackend.Controllers.CompanyTeamController",
+    "Method": "ResolveInvitation",
+    "RelativePath": "api/company/team/invitations/resolve",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "token",
+        "Type": "System.String",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "GloryLikeBackend.Dtos.CompanyTeam.ResolveCompanyTeamInvitationResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
     "ContainingType": "GloryLikeBackend.Controllers.JobOffersController",
     "Method": "GetAll",
     "RelativePath": "api/JobOffers",
@@ -831,7 +909,7 @@
   },
   {
     "ContainingType": "Program\u002B\u003C\u003Ec",
-    "Method": "\u003C\u003CMain\u003E$\u003Eb__0_2",
+    "Method": "\u003C\u003CMain\u003E$\u003Eb__0_3",
     "RelativePath": "db-test",
     "HttpMethod": "GET",
     "IsController": false,

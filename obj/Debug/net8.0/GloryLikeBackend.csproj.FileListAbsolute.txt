@@ -20,12 +20,6 @@ C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\s
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\staticwebassets.build.json
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\staticwebassets.development.json
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\staticwebassets.build.endpoints.json
-C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\staticwebassets\msbuild.GloryLikeBackend.Microsoft.AspNetCore.StaticWebAssets.props
-C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\staticwebassets\msbuild.GloryLikeBackend.Microsoft.AspNetCore.StaticWebAssetEndpoints.props
-C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\staticwebassets\msbuild.build.GloryLikeBackend.props
-C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\staticwebassets\msbuild.buildMultiTargeting.GloryLikeBackend.props
-C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\staticwebassets\msbuild.buildTransitive.GloryLikeBackend.props
-C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\staticwebassets.pack.json
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\GloryLikeBackend.dll
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\refint\GloryLikeBackend.dll
@@ -154,3 +148,8 @@ C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\bin\Debug\net8.0\S
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\bin\Debug\net8.0\System.Text.Encodings.Web.dll
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\bin\Debug\net8.0\System.Text.Json.dll
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\bin\Debug\net8.0\runtimes\browser\lib\net8.0\System.Text.Encodings.Web.dll
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\rpswa.dswa.cache.json
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\rjimswa.dswa.cache.json
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\rjsmrazor.dswa.cache.json
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\rjsmcshtml.dswa.cache.json
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\staticwebassets.build.json.cache

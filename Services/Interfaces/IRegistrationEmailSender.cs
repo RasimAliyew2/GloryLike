@@ -7,4 +7,12 @@ public interface IRegistrationEmailSender
         string verificationCode,
         TimeSpan validFor,
         CancellationToken cancellationToken = default);
+
+    Task SendTeamInvitationAsync(
+        string recipientEmail,
+        string companyName,
+        string role,
+        string invitationUrl,
+        DateTime expiresAtUtc,
+        CancellationToken cancellationToken = default);
 }

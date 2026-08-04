@@ -22,6 +22,12 @@ public class AppDbContext : DbContext
         set;
     }
 
+    public DbSet<CompanyTeamInvitation> CompanyTeamInvitations
+    {
+        get;
+        set;
+    }
+
     public DbSet<JobFamily> JobFamilies { get; set; }
 
     public DbSet<Seniority> Seniorities { get; set; }
@@ -153,6 +159,9 @@ public class AppDbContext : DbContext
                 .HasMaxLength(20)
                 .IsRequired();
 
+            entity.Property(item => item.CompanyName)
+                .HasMaxLength(150);
+
             entity.Property(item => item.CompanyType)
                 .HasMaxLength(30);
 
@@ -171,7 +180,18 @@ public class AppDbContext : DbContext
             entity.HasIndex(item => item.VerificationCodeExpiresAtUtc)
                 .HasDatabaseName(
                     "IX_PendingEmailRegistrations_ExpiresAtUtc");
+
+            entity.HasIndex(item => item.TeamInvitationId)
+                .HasDatabaseName(
+                    "IX_PendingEmailRegistrations_TeamInvitationId");
+
+            entity.HasOne<CompanyTeamInvitation>()
+                .WithMany()
+                .HasForeignKey(item => item.TeamInvitationId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
+
+        ConfigureCompanyTeamInvitations(modelBuilder);
 
         modelBuilder.Entity<SkillQuestionnaire>(entity =>
         {
@@ -233,6 +253,54 @@ public class AppDbContext : DbContext
 
         ConfigureUserSkills(modelBuilder);
         ConfigureVacancies(modelBuilder);
+    }
+
+    private static void ConfigureCompanyTeamInvitations(
+        ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CompanyTeamInvitation>(entity =>
+        {
+            entity.ToTable("CompanyTeamInvitations");
+            entity.HasKey(item => item.Id);
+
+            entity.Property(item => item.Email)
+                .HasMaxLength(150)
+                .IsRequired();
+            entity.Property(item => item.Role)
+                .HasMaxLength(40)
+                .IsRequired();
+            entity.Property(item => item.Status)
+                .HasMaxLength(20)
+                .IsRequired();
+            entity.Property(item => item.TokenHash)
+                .HasMaxLength(64)
+                .IsRequired();
+
+            entity.HasIndex(item => item.AcceptedUserId)
+                .HasDatabaseName(
+                    "IX_CompanyTeamInvitations_AcceptedUserId");
+            entity.HasIndex(item => new
+                {
+                    item.OwnerUserId,
+                    item.Email
+                })
+                .IsUnique()
+                .HasDatabaseName(
+                    "UX_CompanyTeamInvitations_Owner_Email");
+            entity.HasIndex(item => item.TokenHash)
+                .IsUnique()
+                .HasDatabaseName(
+                    "UX_CompanyTeamInvitations_TokenHash");
+
+            entity.HasOne(item => item.OwnerUser)
+                .WithMany()
+                .HasForeignKey(item => item.OwnerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.AcceptedUser)
+                .WithMany()
+                .HasForeignKey(item => item.AcceptedUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
     }
 
     private static void ConfigureUserSkills(ModelBuilder modelBuilder)

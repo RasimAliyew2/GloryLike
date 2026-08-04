@@ -12,9 +12,13 @@ public sealed class PendingEmailRegistration
 
     public string AccountType { get; set; } = string.Empty;
 
+    public string? CompanyName { get; set; }
+
     public string? CompanyType { get; set; }
 
     public string? Industry { get; set; }
+
+    public Guid? TeamInvitationId { get; set; }
 
     public string VerificationCodeHash { get; set; } = string.Empty;
 

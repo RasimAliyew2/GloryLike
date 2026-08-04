@@ -11,10 +11,11 @@
 using System;
 using System.Reflection;
 
+[assembly: Microsoft.Extensions.Configuration.UserSecrets.UserSecretsIdAttribute("bb55d993-ee2e-4664-9723-ff91fd291672")]
 [assembly: System.Reflection.AssemblyCompanyAttribute("GloryLikeBackend")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0ed77be20e6e9efd9320ae6bf523fe0ed7227c40")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5a167d96ef0cfdad2245a59644cc07da842b6189")]
 [assembly: System.Reflection.AssemblyProductAttribute("GloryLikeBackend")]
 [assembly: System.Reflection.AssemblyTitleAttribute("GloryLikeBackend")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -4,6 +4,7 @@ using GloryLikeBackend.Dtos.Auth;
 using GloryLikeBackend.Models;
 using GloryLikeBackend.Services.Hash;
 using GloryLikeBackend.Services.Interfaces;
+using GloryLikeBackend.Services.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace GloryLikeBackend.Services;
@@ -98,8 +99,66 @@ public class AuthService : IAuthService
             StartEmailRegistrationRequest request,
             CancellationToken cancellationToken = default)
     {
+        NormalizeEmailRegistrationRequest(request);
+
+        CompanyTeamInvitation? teamInvitation = null;
+
+        if (!string.IsNullOrWhiteSpace(request.InvitationToken))
+        {
+            var tokenHash = TeamInvitationToken.Hash(
+                request.InvitationToken);
+
+            teamInvitation = await _dbContext.CompanyTeamInvitations
+                .Include(item => item.OwnerUser)
+                .FirstOrDefaultAsync(
+                    item => item.TokenHash == tokenHash,
+                    cancellationToken);
+
+            if (teamInvitation is null)
+            {
+                return EmailRegistrationFailed(
+                    "Invitation tapılmadı.",
+                    EmailRegistrationErrorCodes.NotFound);
+            }
+
+            if (teamInvitation.Status
+                == CompanyTeamInvitationStatuses.Active)
+            {
+                return EmailRegistrationFailed(
+                    "Bu invitation artıq qəbul edilib.",
+                    EmailRegistrationErrorCodes.Conflict);
+            }
+
+            if (teamInvitation.ExpiresAtUtc <= UtcNow())
+            {
+                return EmailRegistrationFailed(
+                    "Invitation link-in vaxtı bitib.",
+                    EmailRegistrationErrorCodes.Expired);
+            }
+
+            if (!string.Equals(
+                    teamInvitation.Email,
+                    request.Email,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return EmailRegistrationFailed(
+                    "Qeydiyyat email-i invitation email-i ilə eyni olmalıdır.",
+                    EmailRegistrationErrorCodes.Conflict);
+            }
+
+            request.AccountType = "employer";
+            request.CompanyName =
+                GetCompanyName(teamInvitation.OwnerUser);
+            request.CompanyType =
+                teamInvitation.OwnerUser.CompanyType;
+            request.Industry =
+                teamInvitation.OwnerUser.Industry;
+        }
+
         var validationMessage =
-            NormalizeAndValidateEmailRegistration(request);
+            ValidateEmailRegistration(
+                request,
+                isTeamInvitation: teamInvitation is not null);
 
         if (!string.IsNullOrWhiteSpace(validationMessage))
         {
@@ -136,6 +195,7 @@ public class AuthService : IAuthService
             ApplyRegistrationData(
                 pending,
                 request,
+                teamInvitation?.Id,
                 now,
                 updatePassword: true);
 
@@ -159,6 +219,7 @@ public class AuthService : IAuthService
         ApplyRegistrationData(
             pending,
             request,
+            teamInvitation?.Id,
             now,
             updatePassword: true);
 
@@ -317,9 +378,53 @@ public class AuthService : IAuthService
                 now);
         }
 
+        CompanyTeamInvitation? teamInvitation = null;
+
+        if (pending.TeamInvitationId is Guid teamInvitationId)
+        {
+            teamInvitation = await _dbContext.CompanyTeamInvitations
+                .Include(item => item.OwnerUser)
+                .FirstOrDefaultAsync(
+                    item => item.Id == teamInvitationId,
+                    cancellationToken);
+
+            if (teamInvitation is null)
+            {
+                return EmailRegistrationFailed(
+                    "Invitation tapılmadı.",
+                    EmailRegistrationErrorCodes.NotFound);
+            }
+
+            if (teamInvitation.Status
+                == CompanyTeamInvitationStatuses.Active)
+            {
+                return EmailRegistrationFailed(
+                    "Bu invitation artıq qəbul edilib.",
+                    EmailRegistrationErrorCodes.Conflict);
+            }
+
+            if (teamInvitation.ExpiresAtUtc <= now)
+            {
+                return EmailRegistrationFailed(
+                    "Invitation link-in vaxtı bitib.",
+                    EmailRegistrationErrorCodes.Expired);
+            }
+
+            if (!string.Equals(
+                    teamInvitation.Email,
+                    pending.Email,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return EmailRegistrationFailed(
+                    "Qeydiyyat email-i invitation email-i ilə eyni olmalıdır.",
+                    EmailRegistrationErrorCodes.Conflict);
+            }
+        }
+
         var user = BuildVerifiedUser(
             pending,
-            now);
+            now,
+            isCompanyTeamMember: teamInvitation is not null);
 
         await using var transaction =
             await _dbContext.Database.BeginTransactionAsync(
@@ -328,6 +433,16 @@ public class AuthService : IAuthService
         try
         {
             _dbContext.Users.Add(user);
+
+            if (teamInvitation is not null)
+            {
+                teamInvitation.AcceptedUser = user;
+                teamInvitation.Status =
+                    CompanyTeamInvitationStatuses.Active;
+                teamInvitation.AcceptedAtUtc = now;
+                teamInvitation.UpdatedAtUtc = now;
+            }
+
             _dbContext.PendingEmailRegistrations.Remove(pending);
 
             await _dbContext.SaveChangesAsync(cancellationToken);
@@ -671,7 +786,7 @@ public class AuthService : IAuthService
                 cancellationToken);
     }
 
-    private static string NormalizeAndValidateEmailRegistration(
+    private static void NormalizeEmailRegistrationRequest(
         StartEmailRegistrationRequest request)
     {
         request.ProfileName =
@@ -682,10 +797,20 @@ public class AuthService : IAuthService
         request.AccountType =
             request.AccountType?.Trim().ToLowerInvariant()
             ?? string.Empty;
+        request.CompanyName =
+            request.CompanyName?.Trim();
         request.CompanyType =
             request.CompanyType?.Trim();
         request.Industry =
             request.Industry?.Trim();
+        request.InvitationToken =
+            request.InvitationToken?.Trim();
+    }
+
+    private static string ValidateEmailRegistration(
+        StartEmailRegistrationRequest request,
+        bool isTeamInvitation)
+    {
 
         if (string.IsNullOrWhiteSpace(request.ProfileName))
             return "Profil və ya şirkət adı boş ola bilməz.";
@@ -705,33 +830,45 @@ public class AuthService : IAuthService
 
         if (request.AccountType == "employer")
         {
-            request.CompanyType = request.CompanyType switch
+            if (!string.IsNullOrWhiteSpace(request.CompanyType))
             {
-                var value when value?.Equals(
-                    "Startup",
-                    StringComparison.OrdinalIgnoreCase) == true
-                    => "Startup",
-                var value when value?.Equals(
-                    "SME",
-                    StringComparison.OrdinalIgnoreCase) == true
-                    => "SME",
-                var value when value?.Equals(
-                    "Corporate",
-                    StringComparison.OrdinalIgnoreCase) == true
-                    => "Corporate",
-                _ => string.Empty
-            };
+                request.CompanyType = request.CompanyType switch
+                {
+                    var value when value.Equals(
+                        "Startup",
+                        StringComparison.OrdinalIgnoreCase)
+                        => "Startup",
+                    var value when value.Equals(
+                        "SME",
+                        StringComparison.OrdinalIgnoreCase)
+                        => "SME",
+                    var value when value.Equals(
+                        "Corporate",
+                        StringComparison.OrdinalIgnoreCase)
+                        => "Corporate",
+                    _ => string.Empty
+                };
+            }
 
-            if (string.IsNullOrWhiteSpace(request.CompanyType))
+            if (!isTeamInvitation
+                && string.IsNullOrWhiteSpace(request.CompanyType))
                 return "Company type seçilməlidir.";
 
-            if (string.IsNullOrWhiteSpace(request.Industry))
+            if (!isTeamInvitation
+                && string.IsNullOrWhiteSpace(request.Industry))
                 return "Industry boş ola bilməz.";
+
+            request.CompanyName =
+                string.IsNullOrWhiteSpace(request.CompanyName)
+                    ? request.ProfileName
+                    : request.CompanyName;
         }
         else
         {
+            request.CompanyName = null;
             request.CompanyType = null;
             request.Industry = null;
+            request.InvitationToken = null;
         }
 
         return string.Empty;
@@ -740,14 +877,17 @@ public class AuthService : IAuthService
     private static void ApplyRegistrationData(
         PendingEmailRegistration pending,
         StartEmailRegistrationRequest request,
+        Guid? teamInvitationId,
         DateTime now,
         bool updatePassword)
     {
         pending.Email = request.Email;
         pending.ProfileName = request.ProfileName;
         pending.AccountType = request.AccountType;
+        pending.CompanyName = request.CompanyName;
         pending.CompanyType = request.CompanyType;
         pending.Industry = request.Industry;
+        pending.TeamInvitationId = teamInvitationId;
         pending.UpdatedAtUtc = now;
 
         if (updatePassword)
@@ -779,11 +919,13 @@ public class AuthService : IAuthService
 
     private static User BuildVerifiedUser(
         PendingEmailRegistration pending,
-        DateTime now)
+        DateTime now,
+        bool isCompanyTeamMember)
     {
         var (name, surname) = SplitProfileName(
             pending.ProfileName,
-            pending.AccountType);
+            pending.AccountType,
+            isCompanyTeamMember);
 
         return new User
         {
@@ -798,7 +940,7 @@ public class AuthService : IAuthService
             AccountType = pending.AccountType,
             CompanyName =
                 pending.AccountType == "employer"
-                    ? pending.ProfileName
+                    ? pending.CompanyName ?? pending.ProfileName
                     : null,
             CompanyType = pending.CompanyType,
             Industry = pending.Industry,
@@ -811,9 +953,11 @@ public class AuthService : IAuthService
     private static (string Name, string Surname)
         SplitProfileName(
             string profileName,
-            string accountType)
+            string accountType,
+            bool isCompanyTeamMember)
     {
-        if (accountType == "employer")
+        if (accountType == "employer"
+            && !isCompanyTeamMember)
             return (profileName, string.Empty);
 
         var parts = profileName.Split(
@@ -851,6 +995,17 @@ public class AuthService : IAuthService
         return $"{safeLocalPart}_{verificationId:N}"[..Math.Min(
             safeLocalPart.Length + 9,
             80)];
+    }
+
+    private static string GetCompanyName(User owner)
+    {
+        if (!string.IsNullOrWhiteSpace(owner.CompanyName))
+            return owner.CompanyName;
+
+        if (!string.IsNullOrWhiteSpace(owner.Name))
+            return owner.Name;
+
+        return owner.Email;
     }
 
     private static string CreateVerificationCode()

@@ -207,6 +207,68 @@ namespace GloryLikeBackend.Migrations
                     b.ToTable("Skills");
                 });
 
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyTeamInvitation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("AcceptedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("AcceptedUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("OwnerUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<DateTime>("SentAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcceptedUserId")
+                        .HasDatabaseName("IX_CompanyTeamInvitations_AcceptedUserId");
+
+                    b.HasIndex("OwnerUserId", "Email")
+                        .IsUnique()
+                        .HasDatabaseName("UX_CompanyTeamInvitations_Owner_Email");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("UX_CompanyTeamInvitations_TokenHash");
+
+                    b.ToTable("CompanyTeamInvitations", (string)null);
+                });
+
             modelBuilder.Entity("GloryLikeBackend.Models.PendingEmailRegistration", b =>
                 {
                     b.Property<Guid>("Id")
@@ -216,6 +278,10 @@ namespace GloryLikeBackend.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("CompanyName")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
 
                     b.Property<string>("CompanyType")
                         .HasMaxLength(30)
@@ -252,6 +318,9 @@ namespace GloryLikeBackend.Migrations
                     b.Property<DateTime>("ResendAvailableAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid?>("TeamInvitationId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
 
@@ -268,6 +337,9 @@ namespace GloryLikeBackend.Migrations
                     b.HasIndex("Email")
                         .IsUnique()
                         .HasDatabaseName("UX_PendingEmailRegistrations_Email");
+
+                    b.HasIndex("TeamInvitationId")
+                        .HasDatabaseName("IX_PendingEmailRegistrations_TeamInvitationId");
 
                     b.HasIndex("VerificationCodeExpiresAtUtc")
                         .HasDatabaseName("IX_PendingEmailRegistrations_ExpiresAtUtc");
@@ -818,6 +890,32 @@ namespace GloryLikeBackend.Migrations
                         .HasDatabaseName("UX_VacancySkillRequirements_VacancyId_SkillId");
 
                     b.ToTable("VacancySkillRequirements", (string)null);
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyTeamInvitation", b =>
+                {
+                    b.HasOne("GloryLikeBackend.Models.User", "AcceptedUser")
+                        .WithMany()
+                        .HasForeignKey("AcceptedUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("GloryLikeBackend.Models.User", "OwnerUser")
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AcceptedUser");
+
+                    b.Navigation("OwnerUser");
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.PendingEmailRegistration", b =>
+                {
+                    b.HasOne("GloryLikeBackend.Models.CompanyTeamInvitation", null)
+                        .WithMany()
+                        .HasForeignKey("TeamInvitationId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.SkillAndJob.Position", b =>

@@ -28,6 +28,12 @@ public sealed class StartEmailRegistrationRequest
     [StringLength(120)]
     public string? Industry { get; set; }
 
+    [StringLength(150)]
+    public string? CompanyName { get; set; }
+
+    [StringLength(200)]
+    public string? InvitationToken { get; set; }
+
     [Range(
         typeof(bool),
         "true",

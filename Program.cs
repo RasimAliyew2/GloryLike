@@ -10,7 +10,33 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddScoped<IUserService, UserService>();
+const string frontendCorsPolicy = "FrontendCors";
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(frontendCorsPolicy, policy =>
+    {
+        if (builder.Environment.IsDevelopment())
+        {
+            policy.SetIsOriginAllowed(origin =>
+            {
+                return Uri.TryCreate(origin, UriKind.Absolute, out var uri)
+                       && (uri.Scheme == Uri.UriSchemeHttp
+                           || uri.Scheme == Uri.UriSchemeHttps)
+                       && uri.IsLoopback;
+            });
+        }
+        else
+        {
+            policy.WithOrigins(
+                "https://bothfind.com",
+                "https://www.bothfind.com");
+        }
+
+        policy.AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 
 
 // Add services to the container.
@@ -24,9 +50,13 @@ builder.Services.AddScoped<IJobOfferService, JobOfferService>();
 builder.Services.AddScoped<IVacancyService, VacancyService>();
 builder.Services.AddScoped<ITalentRadarService, TalentRadarService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<ICompanyTeamService, CompanyTeamService>();
 builder.Services.Configure<OutlookMailOptions>(
     builder.Configuration.GetSection(
         OutlookMailOptions.SectionName));
+builder.Services.Configure<TeamInvitationOptions>(
+    builder.Configuration.GetSection(
+        TeamInvitationOptions.SectionName));
 builder.Services.AddHttpClient<
     IRegistrationEmailSender,
     OutlookGraphRegistrationEmailSender>(
@@ -36,7 +66,6 @@ builder.Services.AddHttpClient<
                 TimeSpan.FromSeconds(30);
         });
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 var app = builder.Build();
@@ -54,28 +83,32 @@ app.UseStaticFiles();
 
 app.UseRouting();
 
+app.UseCors(frontendCorsPolicy);
+
 app.UseAuthorization();
 
-//app.MapGet("/db-test", async (IConfiguration config) =>
-app.MapGet("/db-test", async (IConfiguration config) =>
+if (app.Environment.IsDevelopment())
 {
-    try
+    app.MapGet("/db-test", async (IConfiguration config) =>
     {
-        var cs = config.GetConnectionString("DefaultConnection");
+        try
+        {
+            var cs = config.GetConnectionString("DefaultConnection");
 
-        await using var conn = new SqlConnection(cs);
-        await conn.OpenAsync();
+            await using var conn = new SqlConnection(cs);
+            await conn.OpenAsync();
 
-        await using var cmd = new SqlCommand("SELECT 1", conn);
-        var result = await cmd.ExecuteScalarAsync();
+            await using var cmd = new SqlCommand("SELECT 1", conn);
+            var result = await cmd.ExecuteScalarAsync();
 
-        return Results.Ok($"SQL qoşuldu. Nəticə: {result}");
-    }
-    catch (Exception ex)
-    {
-        return Results.Problem(ex.Message);
-    }
-});
+            return Results.Ok($"SQL qoşuldu. Nəticə: {result}");
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem(ex.Message);
+        }
+    });
+}
 
 app.MapControllerRoute(
     name: "default",

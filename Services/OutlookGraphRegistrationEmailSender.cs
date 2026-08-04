@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
@@ -96,6 +97,79 @@ public sealed class OutlookGraphRegistrationEmailSender
             response.StatusCode);
     }
 
+    public async Task SendTeamInvitationAsync(
+        string recipientEmail,
+        string companyName,
+        string role,
+        string invitationUrl,
+        DateTime expiresAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateConfiguration();
+
+        var accessToken =
+            await GetAccessTokenAsync(
+                cancellationToken);
+        var senderEmail =
+            Uri.EscapeDataString(
+                _options.SenderEmail.Trim());
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"https://graph.microsoft.com/v1.0/users/{senderEmail}/sendMail");
+
+        request.Headers.Authorization =
+            new AuthenticationHeaderValue(
+                "Bearer",
+                accessToken);
+        request.Content = JsonContent.Create(
+            new
+            {
+                message = new
+                {
+                    subject =
+                        $"{companyName} invited you to SkillMatch",
+                    body = new
+                    {
+                        contentType = "HTML",
+                        content = BuildTeamInvitationHtml(
+                            companyName,
+                            role,
+                            invitationUrl,
+                            expiresAtUtc)
+                    },
+                    toRecipients = new[]
+                    {
+                        new
+                        {
+                            emailAddress = new
+                            {
+                                address = recipientEmail
+                            }
+                        }
+                    }
+                },
+                saveToSentItems = true
+            });
+
+        using var response =
+            await _httpClient.SendAsync(
+                request,
+                cancellationToken);
+
+        if (response.IsSuccessStatusCode)
+            return;
+
+        _logger.LogError(
+            "Microsoft Graph team invitation request failed with status {StatusCode}.",
+            (int)response.StatusCode);
+
+        throw new HttpRequestException(
+            "Microsoft Graph team invitation email göndərmədi.",
+            inner: null,
+            response.StatusCode);
+    }
+
     private async Task<string> GetAccessTokenAsync(
         CancellationToken cancellationToken)
     {
@@ -190,6 +264,45 @@ public sealed class OutlookGraphRegistrationEmailSender
                 </div>
                 <p style="margin:22px 0 0;color:#667085;line-height:1.55;">
                   The code is valid for {{validSeconds}} seconds. If you did not request this code, you can ignore this email.
+                </p>
+              </div>
+            </body>
+            </html>
+            """;
+    }
+
+    private static string BuildTeamInvitationHtml(
+        string companyName,
+        string role,
+        string invitationUrl,
+        DateTime expiresAtUtc)
+    {
+        var safeCompany =
+            WebUtility.HtmlEncode(companyName);
+        var safeRole =
+            WebUtility.HtmlEncode(role);
+        var safeUrl =
+            WebUtility.HtmlEncode(invitationUrl);
+        var safeExpiry =
+            WebUtility.HtmlEncode(
+                expiresAtUtc.ToString(
+                    "dd MMM yyyy HH:mm 'UTC'"));
+
+        return $$"""
+            <!doctype html>
+            <html lang="en">
+            <body style="margin:0;padding:24px;background:#f6f8fb;font-family:Arial,sans-serif;color:#101828;">
+              <div style="max-width:560px;margin:0 auto;padding:32px;background:#ffffff;border:1px solid #e4e7ec;border-radius:16px;">
+                <div style="font-size:20px;font-weight:700;color:#5548e8;">SkillMatch</div>
+                <h1 style="margin:22px 0 10px;font-size:24px;">Join {{safeCompany}}</h1>
+                <p style="margin:0 0 20px;color:#667085;line-height:1.55;">
+                  You were invited to the company team as <strong>{{safeRole}}</strong>.
+                </p>
+                <a href="{{safeUrl}}" style="display:inline-block;padding:13px 22px;background:#5548e8;color:#ffffff;text-decoration:none;border-radius:10px;font-weight:700;">
+                  Accept invitation
+                </a>
+                <p style="margin:22px 0 0;color:#667085;line-height:1.55;">
+                  This invitation expires on {{safeExpiry}}. If you were not expecting it, you can ignore this email.
                 </p>
               </div>
             </body>
