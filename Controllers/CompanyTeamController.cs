@@ -26,9 +26,19 @@ public sealed class CompanyTeamController : ControllerBase
                 ownerUserId,
                 cancellationToken);
 
-        return result.Success
-            ? Ok(result)
-            : NotFound(result);
+        if (result.Success)
+            return Ok(result);
+
+        return result.ErrorCode switch
+        {
+            CompanyTeamErrorCodes.NotFound =>
+                NotFound(result),
+            CompanyTeamErrorCodes.Forbidden =>
+                StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    result),
+            _ => BadRequest(result)
+        };
     }
 
     [HttpPost("invitations")]
@@ -58,6 +68,38 @@ public sealed class CompanyTeamController : ControllerBase
             CompanyTeamErrorCodes.EmailDeliveryFailed =>
                 StatusCode(
                     StatusCodes.Status503ServiceUnavailable,
+                    result),
+            CompanyTeamErrorCodes.Forbidden =>
+                StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    result),
+            _ => BadRequest(result)
+        };
+    }
+
+    [HttpDelete("invitations/{invitationId:guid}")]
+    public async Task<ActionResult<CompanyTeamResponse>>
+        RemoveMember(
+            Guid invitationId,
+            [FromQuery] int actorUserId,
+            CancellationToken cancellationToken)
+    {
+        var result =
+            await _companyTeamService.RemoveMemberAsync(
+                invitationId,
+                actorUserId,
+                cancellationToken);
+
+        if (result.Success)
+            return Ok(result);
+
+        return result.ErrorCode switch
+        {
+            CompanyTeamErrorCodes.NotFound =>
+                NotFound(result),
+            CompanyTeamErrorCodes.Forbidden =>
+                StatusCode(
+                    StatusCodes.Status403Forbidden,
                     result),
             _ => BadRequest(result)
         };

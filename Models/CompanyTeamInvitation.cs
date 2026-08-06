@@ -36,4 +36,6 @@ public static class CompanyTeamInvitationStatuses
     public const string Invited = "Invited";
 
     public const string Active = "Active";
+
+    public const string Removed = "Removed";
 }

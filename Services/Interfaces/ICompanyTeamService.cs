@@ -12,6 +12,11 @@ public interface ICompanyTeamService
         InviteCompanyTeamMemberRequest request,
         CancellationToken cancellationToken = default);
 
+    Task<CompanyTeamResponse> RemoveMemberAsync(
+        Guid invitationId,
+        int actorUserId,
+        CancellationToken cancellationToken = default);
+
     Task<ResolveCompanyTeamInvitationResponse> ResolveInvitationAsync(
         string token,
         CancellationToken cancellationToken = default);

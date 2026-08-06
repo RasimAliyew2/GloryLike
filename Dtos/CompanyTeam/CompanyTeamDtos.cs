@@ -27,6 +27,8 @@ public sealed class CompanyTeamResponse
 
     public string CompanyName { get; set; } = string.Empty;
 
+    public bool CanManageTeam { get; set; }
+
     public CompanyTeamMemberDto? Member { get; set; }
 
     public List<CompanyTeamMemberDto> Members { get; set; } = [];
@@ -87,4 +89,6 @@ public static class CompanyTeamErrorCodes
     public const string EmailDeliveryFailed = "email_delivery_failed";
 
     public const string Conflict = "conflict";
+
+    public const string Forbidden = "forbidden";
 }

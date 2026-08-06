@@ -129,6 +129,14 @@ public class AuthService : IAuthService
                     EmailRegistrationErrorCodes.Conflict);
             }
 
+            if (teamInvitation.Status
+                == CompanyTeamInvitationStatuses.Removed)
+            {
+                return EmailRegistrationFailed(
+                    "Bu invitation ləğv edilib.",
+                    EmailRegistrationErrorCodes.Expired);
+            }
+
             if (teamInvitation.ExpiresAtUtc <= UtcNow())
             {
                 return EmailRegistrationFailed(
@@ -401,6 +409,14 @@ public class AuthService : IAuthService
                 return EmailRegistrationFailed(
                     "Bu invitation artıq qəbul edilib.",
                     EmailRegistrationErrorCodes.Conflict);
+            }
+
+            if (teamInvitation.Status
+                == CompanyTeamInvitationStatuses.Removed)
+            {
+                return EmailRegistrationFailed(
+                    "Bu invitation ləğv edilib.",
+                    EmailRegistrationErrorCodes.Expired);
             }
 
             if (teamInvitation.ExpiresAtUtc <= now)

@@ -35,10 +35,21 @@ public sealed class CompanyTeamService : ICompanyTeamService
         int ownerUserId,
         CancellationToken cancellationToken = default)
     {
+        var access = await ResolveTeamAccessAsync(
+            ownerUserId,
+            cancellationToken);
+
+        if (access is null)
+        {
+            return Failed(
+                "Bu company team-ə giriş icazəniz yoxdur.",
+                CompanyTeamErrorCodes.Forbidden);
+        }
+
         var owner = await _dbContext.Users
             .AsNoTracking()
             .FirstOrDefaultAsync(
-                item => item.Id == ownerUserId,
+                item => item.Id == access.OwnerUserId,
                 cancellationToken);
 
         if (owner is null)
@@ -51,7 +62,10 @@ public sealed class CompanyTeamService : ICompanyTeamService
         var invitations = await _dbContext.CompanyTeamInvitations
             .AsNoTracking()
             .Include(item => item.AcceptedUser)
-            .Where(item => item.OwnerUserId == ownerUserId)
+            .Where(item =>
+                item.OwnerUserId == access.OwnerUserId
+                && item.Status
+                    != CompanyTeamInvitationStatuses.Removed)
             .OrderBy(item => item.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
@@ -59,6 +73,7 @@ public sealed class CompanyTeamService : ICompanyTeamService
         {
             Success = true,
             CompanyName = GetCompanyName(owner),
+            CanManageTeam = access.CanManageTeam,
             Members = invitations
                 .Select(ToMemberDto)
                 .ToList()
@@ -83,9 +98,20 @@ public sealed class CompanyTeamService : ICompanyTeamService
                 CompanyTeamErrorCodes.Validation);
         }
 
+        var access = await ResolveTeamAccessAsync(
+            request.OwnerUserId,
+            cancellationToken);
+
+        if (access is null || !access.CanManageTeam)
+        {
+            return Failed(
+                "Yalnız Founder və ya HR Admin team üzvü dəvət edə bilər.",
+                CompanyTeamErrorCodes.Forbidden);
+        }
+
         var owner = await _dbContext.Users
             .FirstOrDefaultAsync(
-                item => item.Id == request.OwnerUserId,
+                item => item.Id == access.OwnerUserId,
                 cancellationToken);
 
         if (owner is null)
@@ -133,7 +159,7 @@ public sealed class CompanyTeamService : ICompanyTeamService
                 .AsNoTracking()
                 .AnyAsync(
                     item =>
-                        item.OwnerUserId != request.OwnerUserId
+                        item.OwnerUserId != access.OwnerUserId
                         && item.Email == request.Email
                         && item.Status
                             == CompanyTeamInvitationStatuses.Invited
@@ -151,7 +177,7 @@ public sealed class CompanyTeamService : ICompanyTeamService
             await _dbContext.CompanyTeamInvitations
                 .FirstOrDefaultAsync(
                     item =>
-                        item.OwnerUserId == request.OwnerUserId
+                        item.OwnerUserId == access.OwnerUserId
                         && item.Email == request.Email,
                     cancellationToken);
 
@@ -167,16 +193,19 @@ public sealed class CompanyTeamService : ICompanyTeamService
         invitation ??= new CompanyTeamInvitation
         {
             Id = Guid.NewGuid(),
-            OwnerUserId = request.OwnerUserId,
+            OwnerUserId = access.OwnerUserId,
             Email = request.Email,
             CreatedAtUtc = UtcNow()
         };
 
         var previousRole = invitation.Role;
+        var previousStatus = invitation.Status;
         var previousTokenHash = invitation.TokenHash;
         var previousExpiry = invitation.ExpiresAtUtc;
         var previousSentAt = invitation.SentAtUtc;
         var previousUpdatedAt = invitation.UpdatedAtUtc;
+        var previousAcceptedUserId = invitation.AcceptedUserId;
+        var previousAcceptedAt = invitation.AcceptedAtUtc;
 
         var now = UtcNow();
         var token = TeamInvitationToken.Create();
@@ -226,10 +255,13 @@ public sealed class CompanyTeamService : ICompanyTeamService
                 invitation,
                 isNew,
                 previousRole,
+                previousStatus,
                 previousTokenHash,
                 previousExpiry,
                 previousSentAt,
-                previousUpdatedAt);
+                previousUpdatedAt,
+                previousAcceptedUserId,
+                previousAcceptedAt);
 
             return Failed(
                 "Invitation email göndərilmədi. Outlook/Microsoft Graph konfiqurasiyasını yoxlayın.",
@@ -247,10 +279,13 @@ public sealed class CompanyTeamService : ICompanyTeamService
                 invitation,
                 isNew,
                 previousRole,
+                previousStatus,
                 previousTokenHash,
                 previousExpiry,
                 previousSentAt,
-                previousUpdatedAt);
+                previousUpdatedAt,
+                previousAcceptedUserId,
+                previousAcceptedAt);
 
             return Failed(
                 "Invitation email göndərilmədi. Outlook/Microsoft Graph konfiqurasiyasını yoxlayın.",
@@ -262,7 +297,78 @@ public sealed class CompanyTeamService : ICompanyTeamService
             Success = true,
             Message = "Invitation email göndərildi.",
             CompanyName = companyName,
+            CanManageTeam = true,
             Member = ToMemberDto(invitation)
+        };
+    }
+
+    public async Task<CompanyTeamResponse> RemoveMemberAsync(
+        Guid invitationId,
+        int actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        if (invitationId == Guid.Empty || actorUserId <= 0)
+        {
+            return Failed(
+                "Team üzvü və istifadəçi məlumatı düzgün deyil.",
+                CompanyTeamErrorCodes.Validation);
+        }
+
+        var invitation =
+            await _dbContext.CompanyTeamInvitations
+                .FirstOrDefaultAsync(
+                    item => item.Id == invitationId
+                        && item.Status
+                            != CompanyTeamInvitationStatuses.Removed,
+                    cancellationToken);
+
+        if (invitation is null)
+        {
+            return Failed(
+                "Team üzvü və ya invitation tapılmadı.",
+                CompanyTeamErrorCodes.NotFound);
+        }
+
+        var access = await ResolveTeamAccessAsync(
+            actorUserId,
+            cancellationToken);
+
+        if (access is null
+            || !access.CanManageTeam
+            || access.OwnerUserId != invitation.OwnerUserId)
+        {
+            return Failed(
+                "Yalnız Founder və ya həmin company-nin HR Admin-i team üzvünü silə bilər.",
+                CompanyTeamErrorCodes.Forbidden);
+        }
+
+        var pendingRegistrations =
+            await _dbContext.PendingEmailRegistrations
+                .Where(item =>
+                    item.TeamInvitationId == invitation.Id)
+                .ToListAsync(cancellationToken);
+
+        if (pendingRegistrations.Count > 0)
+        {
+            _dbContext.PendingEmailRegistrations.RemoveRange(
+                pendingRegistrations);
+        }
+
+        var now = UtcNow();
+        invitation.Status =
+            CompanyTeamInvitationStatuses.Removed;
+        invitation.TokenHash = TeamInvitationToken.Hash(
+            TeamInvitationToken.Create());
+        invitation.ExpiresAtUtc = now;
+        invitation.UpdatedAtUtc = now;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new CompanyTeamResponse
+        {
+            Success = true,
+            Message = "Team üzvü silindi.",
+            CanManageTeam = true
         };
     }
 
@@ -270,10 +376,13 @@ public sealed class CompanyTeamService : ICompanyTeamService
         CompanyTeamInvitation invitation,
         bool isNew,
         string previousRole,
+        string previousStatus,
         string previousTokenHash,
         DateTime previousExpiry,
         DateTime previousSentAt,
-        DateTime previousUpdatedAt)
+        DateTime previousUpdatedAt,
+        int? previousAcceptedUserId,
+        DateTime? previousAcceptedAt)
     {
         if (isNew)
         {
@@ -282,10 +391,13 @@ public sealed class CompanyTeamService : ICompanyTeamService
         else
         {
             invitation.Role = previousRole;
+            invitation.Status = previousStatus;
             invitation.TokenHash = previousTokenHash;
             invitation.ExpiresAtUtc = previousExpiry;
             invitation.SentAtUtc = previousSentAt;
             invitation.UpdatedAtUtc = previousUpdatedAt;
+            invitation.AcceptedUserId = previousAcceptedUserId;
+            invitation.AcceptedAtUtc = previousAcceptedAt;
         }
 
         await _dbContext.SaveChangesAsync(
@@ -327,6 +439,14 @@ public sealed class CompanyTeamService : ICompanyTeamService
             return ResolveFailed(
                 "Bu invitation artıq qəbul edilib.",
                 CompanyTeamErrorCodes.AlreadyAccepted);
+        }
+
+        if (invitation.Status
+            == CompanyTeamInvitationStatuses.Removed)
+        {
+            return ResolveFailed(
+                "Bu invitation ləğv edilib.",
+                CompanyTeamErrorCodes.Expired);
         }
 
         if (invitation.ExpiresAtUtc <= UtcNow())
@@ -373,6 +493,66 @@ public sealed class CompanyTeamService : ICompanyTeamService
         return _timeProvider
             .GetUtcNow()
             .UtcDateTime;
+    }
+
+    private async Task<TeamAccess?> ResolveTeamAccessAsync(
+        int actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (actorUserId <= 0)
+            return null;
+
+        var actor = await _dbContext.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                item => item.Id == actorUserId,
+                cancellationToken);
+
+        if (actor is null
+            || !string.Equals(
+                actor.AccountType,
+                "employer",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var memberships =
+            await _dbContext.CompanyTeamInvitations
+                .AsNoTracking()
+                .Where(item =>
+                    item.AcceptedUserId == actorUserId)
+                .OrderByDescending(item => item.AcceptedAtUtc)
+                .Select(item => new
+                {
+                    item.OwnerUserId,
+                    item.Role,
+                    item.Status
+                })
+                .ToListAsync(cancellationToken);
+
+        var activeMembership = memberships.FirstOrDefault(
+            item => item.Status
+                == CompanyTeamInvitationStatuses.Active);
+
+        if (activeMembership is not null)
+        {
+            return new TeamAccess(
+                activeMembership.OwnerUserId,
+                string.Equals(
+                    activeMembership.Role,
+                    "HR Admin",
+                    StringComparison.OrdinalIgnoreCase));
+        }
+
+        // An employer who has ever belonged to another company is not
+        // treated as that company's Founder after removal.
+        if (memberships.Count > 0)
+            return null;
+
+        return new TeamAccess(
+            actorUserId,
+            CanManageTeam: true);
     }
 
     private static string NormalizeRole(string? role)
@@ -453,4 +633,8 @@ public sealed class CompanyTeamService : ICompanyTeamService
             ErrorCode = errorCode
         };
     }
+
+    private sealed record TeamAccess(
+        int OwnerUserId,
+        bool CanManageTeam);
 }

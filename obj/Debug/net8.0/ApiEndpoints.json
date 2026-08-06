@@ -261,6 +261,37 @@
   },
   {
     "ContainingType": "GloryLikeBackend.Controllers.CompanyTeamController",
+    "Method": "RemoveMember",
+    "RelativePath": "api/company/team/invitations/{invitationId}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "invitationId",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "actorUserId",
+        "Type": "System.Int32",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "GloryLikeBackend.Dtos.CompanyTeam.CompanyTeamResponse",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "GloryLikeBackend.Controllers.CompanyTeamController",
     "Method": "ResolveInvitation",
     "RelativePath": "api/company/team/invitations/resolve",
     "HttpMethod": "GET",
