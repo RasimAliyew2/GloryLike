@@ -51,20 +51,15 @@ builder.Services.AddScoped<IVacancyService, VacancyService>();
 builder.Services.AddScoped<ITalentRadarService, TalentRadarService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ICompanyTeamService, CompanyTeamService>();
-builder.Services.Configure<OutlookMailOptions>(
+builder.Services.Configure<SmtpOptions>(
     builder.Configuration.GetSection(
-        OutlookMailOptions.SectionName));
+        SmtpOptions.SectionName));
 builder.Services.Configure<TeamInvitationOptions>(
     builder.Configuration.GetSection(
         TeamInvitationOptions.SectionName));
-builder.Services.AddHttpClient<
+builder.Services.AddScoped<
     IRegistrationEmailSender,
-    OutlookGraphRegistrationEmailSender>(
-        client =>
-        {
-            client.Timeout =
-                TimeSpan.FromSeconds(30);
-        });
+    SmtpRegistrationEmailSender>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
