@@ -626,6 +626,110 @@ public class AuthService : IAuthService
         };
     }
 
+    public async Task<AuthResponse> SocialLoginAsync(
+        SocialLoginRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        request.Provider =
+            request.Provider.Trim().ToLowerInvariant();
+        request.ProviderSubject =
+            request.ProviderSubject.Trim();
+        request.Email =
+            request.Email.Trim().ToLowerInvariant();
+        request.FirstName =
+            NormalizePersonName(request.FirstName);
+        request.LastName =
+            NormalizePersonName(request.LastName);
+
+        if (request.Provider is not ("google" or "apple"))
+            return Failed("Social sign in provayderi dəstəklənmir.");
+
+        if (string.IsNullOrWhiteSpace(request.ProviderSubject)
+            || string.IsNullOrWhiteSpace(request.Email))
+        {
+            return Failed(
+                "Social hesabdan lazımi istifadəçi məlumatı alınmadı.");
+        }
+
+        var user = await _dbContext.Users
+            .FirstOrDefaultAsync(
+                item => item.Email.ToLower() == request.Email,
+                cancellationToken);
+
+        var now = UtcNow();
+
+        if (user is not null)
+        {
+            var changed = false;
+
+            if (string.IsNullOrWhiteSpace(user.Name)
+                && !string.IsNullOrWhiteSpace(request.FirstName))
+            {
+                user.Name = request.FirstName;
+                changed = true;
+            }
+
+            if (string.IsNullOrWhiteSpace(user.Surname)
+                && !string.IsNullOrWhiteSpace(request.LastName))
+            {
+                user.Surname = request.LastName;
+                changed = true;
+            }
+
+            if (user.EmailVerifiedAtUtc is null)
+            {
+                user.EmailVerifiedAtUtc = now;
+                changed = true;
+            }
+
+            if (changed)
+            {
+                user.UpdatedAt = now;
+                await _dbContext.SaveChangesAsync(
+                    cancellationToken);
+            }
+
+            return new AuthResponse
+            {
+                Success = true,
+                Message = "Social sign in uğurludur.",
+                User = ToDto(user)
+            };
+        }
+
+        var name = string.IsNullOrWhiteSpace(request.FirstName)
+            ? BuildNameFromEmail(request.Email)
+            : request.FirstName;
+
+        user = new User
+        {
+            UserName = await CreateSocialUserNameAsync(
+                request.Email,
+                cancellationToken),
+            Name = name,
+            Surname = request.LastName,
+            PhoneNumber = null,
+            Email = request.Email,
+            PasswordHash = PasswordHasher.HashPassword(
+                Convert.ToBase64String(
+                    RandomNumberGenerator.GetBytes(48))),
+            AccountType = "candidate",
+            EmailVerifiedAtUtc = now,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        _dbContext.Users.Add(user);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new AuthResponse
+        {
+            Success = true,
+            Message = "Social hesab yaradıldı və sign in tamamlandı.",
+            User = ToDto(user)
+        };
+    }
+
     public async Task<ForgotPasswordResponse> ForgotPasswordAsync(
         ForgotPasswordRequest request,
         CancellationToken cancellationToken = default)
@@ -1029,6 +1133,61 @@ public class AuthService : IAuthService
         return RandomNumberGenerator
             .GetInt32(0, 1_000_000)
             .ToString("D6");
+    }
+
+    private async Task<string> CreateSocialUserNameAsync(
+        string email,
+        CancellationToken cancellationToken)
+    {
+        var localPart = email.Split('@', 2)[0];
+        var safeLocalPart = new string(
+            localPart
+                .Where(character =>
+                    char.IsLetterOrDigit(character)
+                    || character is '.' or '_' or '-')
+                .Take(55)
+                .ToArray())
+            .Trim('.', '_', '-');
+
+        if (string.IsNullOrWhiteSpace(safeLocalPart))
+            safeLocalPart = "user";
+
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            var suffix = Convert
+                .ToHexString(
+                    RandomNumberGenerator.GetBytes(5))
+                .ToLowerInvariant();
+            var candidate = $"{safeLocalPart}_{suffix}";
+
+            var exists = await _dbContext.Users
+                .AnyAsync(
+                    item => item.UserName == candidate,
+                    cancellationToken);
+
+            if (!exists)
+                return candidate;
+        }
+
+        return $"user_{Guid.NewGuid():N}";
+    }
+
+    private static string NormalizePersonName(string? value)
+    {
+        var normalized = value?.Trim() ?? string.Empty;
+
+        return normalized.Length <= 80
+            ? normalized
+            : normalized[..80];
+    }
+
+    private static string BuildNameFromEmail(string email)
+    {
+        var localPart = email.Split('@', 2)[0].Trim();
+
+        return string.IsNullOrWhiteSpace(localPart)
+            ? "User"
+            : NormalizePersonName(localPart);
     }
 
     private static string BuildCodeSecret(

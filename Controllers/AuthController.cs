@@ -1,6 +1,10 @@
+using System.Security.Cryptography;
+using System.Text;
 using GloryLikeBackend.Dtos.Auth;
+using GloryLikeBackend.Options;
 using GloryLikeBackend.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace GloryLikeBackend.Controllers;
 
@@ -9,10 +13,14 @@ namespace GloryLikeBackend.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly SocialAuthOptions _socialAuthOptions;
 
-    public AuthController(IAuthService authService)
+    public AuthController(
+        IAuthService authService,
+        IOptions<SocialAuthOptions> socialAuthOptions)
     {
         _authService = authService;
+        _socialAuthOptions = socialAuthOptions.Value;
     }
 
     [HttpPost("register")]
@@ -123,6 +131,33 @@ public class AuthController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("social")]
+    public async Task<ActionResult<AuthResponse>> SocialLogin(
+        [FromBody] SocialLoginRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!HasValidSocialAuthSecret())
+        {
+            return Unauthorized(new AuthResponse
+            {
+                Success = false,
+                Message = "Social sign in sorğusu təsdiqlənmədi."
+            });
+        }
+
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var result = await _authService.SocialLoginAsync(
+            request,
+            cancellationToken);
+
+        if (!result.Success)
+            return BadRequest(result);
+
+        return Ok(result);
+    }
+
     [HttpPost("forgot-password")]
     public async Task<ActionResult<ForgotPasswordResponse>> ForgotPassword(
         [FromBody] ForgotPasswordRequest request,
@@ -180,5 +215,29 @@ public class AuthController : ControllerBase
 
             _ => BadRequest(result)
         };
+    }
+
+    private bool HasValidSocialAuthSecret()
+    {
+        var configuredSecret =
+            _socialAuthOptions.BackendSharedSecret;
+        var suppliedSecret =
+            Request.Headers["X-GloryLike-Social-Auth"]
+                .ToString();
+
+        if (string.IsNullOrWhiteSpace(configuredSecret)
+            || string.IsNullOrWhiteSpace(suppliedSecret))
+        {
+            return false;
+        }
+
+        var configuredHash = SHA256.HashData(
+            Encoding.UTF8.GetBytes(configuredSecret));
+        var suppliedHash = SHA256.HashData(
+            Encoding.UTF8.GetBytes(suppliedSecret));
+
+        return CryptographicOperations.FixedTimeEquals(
+            configuredHash,
+            suppliedHash);
     }
 }

@@ -24,6 +24,10 @@ public interface IAuthService
 
     Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default);
 
+    Task<AuthResponse> SocialLoginAsync(
+        SocialLoginRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<ForgotPasswordResponse> ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken cancellationToken = default);
 
     Task<AuthResponse> ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default);

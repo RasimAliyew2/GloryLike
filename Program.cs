@@ -60,6 +60,9 @@ builder.Services.Configure<SmtpOptions>(
 builder.Services.Configure<TeamInvitationOptions>(
     builder.Configuration.GetSection(
         TeamInvitationOptions.SectionName));
+builder.Services.Configure<SocialAuthOptions>(
+    builder.Configuration.GetSection(
+        SocialAuthOptions.SectionName));
 builder.Services.AddScoped<
     IRegistrationEmailSender,
     SmtpRegistrationEmailSender>();
