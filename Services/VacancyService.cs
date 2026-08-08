@@ -61,13 +61,16 @@ public sealed class VacancyService : IVacancyService
         new(JsonSerializerDefaults.Web);
 
     private readonly AppDbContext _dbContext;
+    private readonly ICompanyAccessService _companyAccessService;
     private readonly ILogger<VacancyService> _logger;
 
     public VacancyService(
         AppDbContext dbContext,
+        ICompanyAccessService companyAccessService,
         ILogger<VacancyService> logger)
     {
         _dbContext = dbContext;
+        _companyAccessService = companyAccessService;
         _logger = logger;
     }
 
@@ -79,7 +82,9 @@ public sealed class VacancyService : IVacancyService
         var candidateExists = await _dbContext.Users
             .AsNoTracking()
             .AnyAsync(
-                user => user.Id == candidateUserId,
+                user =>
+                    user.Id == candidateUserId
+                    && user.AccountType == "candidate",
                 cancellationToken);
 
         if (!candidateExists)
@@ -203,9 +208,18 @@ public sealed class VacancyService : IVacancyService
             int employerUserId,
             CancellationToken cancellationToken = default)
     {
+        var access = await _companyAccessService.ResolveAsync(
+            employerUserId,
+            cancellationToken);
+
+        if (access is null)
+            return [];
+
         return await _dbContext.Vacancies
             .AsNoTracking()
-            .Where(vacancy => vacancy.EmployerUserId == employerUserId)
+            .Where(vacancy =>
+                vacancy.CompanyOwnerUserId
+                    == access.CompanyOwnerUserId)
             .OrderByDescending(vacancy => vacancy.CreatedAtUtc)
             .Select(vacancy => new EmployerVacancyListItemDto
             {
@@ -234,6 +248,13 @@ public sealed class VacancyService : IVacancyService
         if (employerUserId <= 0 || vacancyId <= 0)
             return null;
 
+        var access = await _companyAccessService.ResolveAsync(
+            employerUserId,
+            cancellationToken);
+
+        if (access is null)
+            return null;
+
         var vacancy = await _dbContext.Vacancies
             .AsNoTracking()
             .AsSplitQuery()
@@ -243,7 +264,8 @@ public sealed class VacancyService : IVacancyService
             .FirstOrDefaultAsync(
                 item =>
                     item.Id == vacancyId
-                    && item.EmployerUserId == employerUserId,
+                    && item.CompanyOwnerUserId
+                        == access.CompanyOwnerUserId,
                 cancellationToken);
 
         if (vacancy is null)
@@ -392,6 +414,13 @@ public sealed class VacancyService : IVacancyService
         if (employerUserId <= 0 || vacancyId <= 0)
             return null;
 
+        var access = await _companyAccessService.ResolveAsync(
+            employerUserId,
+            cancellationToken);
+
+        if (access is null)
+            return null;
+
         var vacancy = await _dbContext.Vacancies
             .AsNoTracking()
             .AsSplitQuery()
@@ -404,7 +433,8 @@ public sealed class VacancyService : IVacancyService
             .FirstOrDefaultAsync(
                 item =>
                     item.Id == vacancyId
-                    && item.EmployerUserId == employerUserId,
+                    && item.CompanyOwnerUserId
+                        == access.CompanyOwnerUserId,
                 cancellationToken);
 
         if (vacancy is null)
@@ -435,11 +465,24 @@ public sealed class VacancyService : IVacancyService
                 "Employer və vacancy ID düzgün olmalıdır.");
         }
 
+        var access = await _companyAccessService.ResolveAsync(
+            employerUserId,
+            cancellationToken);
+
+        if (access is null)
+        {
+            return ToggleEmployerVacancyStatusResult.NotFound(
+                employerUserId,
+                vacancyId,
+                "Bu company-nin vacancy-lərinə giriş icazəniz yoxdur.");
+        }
+
         var vacancy = await _dbContext.Vacancies
             .FirstOrDefaultAsync(
                 item =>
                     item.Id == vacancyId
-                    && item.EmployerUserId == employerUserId,
+                    && item.CompanyOwnerUserId
+                        == access.CompanyOwnerUserId,
                 cancellationToken);
 
         if (vacancy is null)
@@ -500,7 +543,9 @@ public sealed class VacancyService : IVacancyService
         var candidateExists = await _dbContext.Users
             .AsNoTracking()
             .AnyAsync(
-                user => user.Id == candidateUserId,
+                user =>
+                    user.Id == candidateUserId
+                    && user.AccountType == "candidate",
                 cancellationToken);
 
         if (!candidateExists)
@@ -625,6 +670,16 @@ public sealed class VacancyService : IVacancyService
         if (!string.IsNullOrWhiteSpace(payloadValidationMessage))
             return CreateVacancyResult.Invalid(payloadValidationMessage);
 
+        var access = await _companyAccessService.ResolveAsync(
+            request.EmployerUserId,
+            cancellationToken);
+
+        if (access is null)
+        {
+            return CreateVacancyResult.Invalid(
+                "Bu company üçün vacancy yaratmaq icazəniz yoxdur.");
+        }
+
         var employerExists = await _dbContext.Users
             .AsNoTracking()
             .AnyAsync(
@@ -716,6 +771,7 @@ public sealed class VacancyService : IVacancyService
         var vacancy = new Vacancy
         {
             EmployerUserId = request.EmployerUserId,
+            CompanyOwnerUserId = access.CompanyOwnerUserId,
             PlatformVacancyId = payload.PlatformVacancyId,
             JobFamilyId = payload.JobFamilyId,
             SeniorityId = payload.SeniorityId,
@@ -824,6 +880,18 @@ public sealed class VacancyService : IVacancyService
                 "Employer və vacancy ID düzgün olmalıdır.");
         }
 
+        var access = await _companyAccessService.ResolveAsync(
+            request.EmployerUserId,
+            cancellationToken);
+
+        if (access is null)
+        {
+            return UpdateVacancyResult.NotFound(
+                request.EmployerUserId,
+                vacancyId,
+                "Bu company-nin vacancy-lərinə giriş icazəniz yoxdur.");
+        }
+
         var payload = request.Vacancy ?? new CreateVacancyPayload();
         Normalize(payload);
 
@@ -848,7 +916,8 @@ public sealed class VacancyService : IVacancyService
             .FirstOrDefaultAsync(
                 item =>
                     item.Id == vacancyId
-                    && item.EmployerUserId == request.EmployerUserId,
+                    && item.CompanyOwnerUserId
+                        == access.CompanyOwnerUserId,
                 cancellationToken);
 
         if (vacancy is null)

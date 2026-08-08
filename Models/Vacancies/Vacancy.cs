@@ -4,6 +4,7 @@ public sealed class Vacancy
 {
     public int Id { get; set; }
     public int EmployerUserId { get; set; }
+    public int CompanyOwnerUserId { get; set; }
     public string PlatformVacancyId { get; set; } = string.Empty;
     public int JobFamilyId { get; set; }
     public int SeniorityId { get; set; }

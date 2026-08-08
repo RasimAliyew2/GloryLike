@@ -28,6 +28,8 @@ public class AppDbContext : DbContext
         set;
     }
 
+    public DbSet<CompanyProfile> CompanyProfiles { get; set; }
+
     public DbSet<JobFamily> JobFamilies { get; set; }
 
     public DbSet<Seniority> Seniorities { get; set; }
@@ -192,6 +194,7 @@ public class AppDbContext : DbContext
         });
 
         ConfigureCompanyTeamInvitations(modelBuilder);
+        ConfigureCompanyProfiles(modelBuilder);
 
         modelBuilder.Entity<SkillQuestionnaire>(entity =>
         {
@@ -361,6 +364,88 @@ public class AppDbContext : DbContext
         });
     }
 
+    private static void ConfigureCompanyProfiles(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CompanyProfile>(entity =>
+        {
+            entity.ToTable("CompanyProfiles");
+            entity.HasKey(item => item.Id);
+
+            entity.Property(item => item.CompanyName)
+                .HasMaxLength(160)
+                .IsRequired();
+            entity.Property(item => item.CompanyType)
+                .HasMaxLength(40)
+                .IsRequired();
+            entity.Property(item => item.ActivityScope)
+                .HasMaxLength(120)
+                .IsRequired();
+            entity.Property(item => item.EmployeeCount)
+                .HasMaxLength(30)
+                .IsRequired();
+            entity.Property(item => item.Website)
+                .HasMaxLength(240)
+                .IsRequired();
+            entity.Property(item => item.PageLanguage)
+                .HasMaxLength(40)
+                .IsRequired();
+            entity.Property(item => item.CompanyVideo)
+                .HasMaxLength(240)
+                .IsRequired();
+            entity.Property(item => item.CompanyDescription)
+                .HasMaxLength(2500)
+                .IsRequired();
+            entity.Property(item => item.CompanyCulture)
+                .HasMaxLength(1600)
+                .IsRequired();
+            entity.Property(item => item.WhyWorkWithUs)
+                .HasMaxLength(1600)
+                .IsRequired();
+            entity.Property(item => item.BenefitsJson)
+                .IsRequired();
+            entity.Property(item => item.CompanyAddress)
+                .HasMaxLength(240)
+                .IsRequired();
+            entity.Property(item => item.CompanyCountry)
+                .HasMaxLength(100)
+                .IsRequired();
+            entity.Property(item => item.CompanyCity)
+                .HasMaxLength(100)
+                .IsRequired();
+            entity.Property(item => item.LinkedInUrl)
+                .HasMaxLength(240)
+                .IsRequired();
+            entity.Property(item => item.InstagramUrl)
+                .HasMaxLength(240)
+                .IsRequired();
+            entity.Property(item => item.FacebookUrl)
+                .HasMaxLength(240)
+                .IsRequired();
+            entity.Property(item => item.YoutubeUrl)
+                .HasMaxLength(240)
+                .IsRequired();
+            entity.Property(item => item.TelegramUrl)
+                .HasMaxLength(240)
+                .IsRequired();
+            entity.Property(item => item.TiktokUrl)
+                .HasMaxLength(240)
+                .IsRequired();
+
+            entity.HasIndex(item => item.OwnerUserId)
+                .IsUnique()
+                .HasDatabaseName("UX_CompanyProfiles_OwnerUserId");
+
+            entity.HasOne(item => item.OwnerUser)
+                .WithMany()
+                .HasForeignKey(item => item.OwnerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(item => item.UpdatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
     private static void ConfigureVacancies(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Vacancy>(entity =>
@@ -431,6 +516,8 @@ public class AppDbContext : DbContext
                 .HasDatabaseName("UX_Vacancies_PlatformVacancyId");
             entity.HasIndex(item => item.EmployerUserId)
                 .HasDatabaseName("IX_Vacancies_EmployerUserId");
+            entity.HasIndex(item => item.CompanyOwnerUserId)
+                .HasDatabaseName("IX_Vacancies_CompanyOwnerUserId");
             entity.HasIndex(item => item.PositionId)
                 .HasDatabaseName("IX_Vacancies_PositionId");
             entity.HasIndex(item => item.CreatedAtUtc)
@@ -439,6 +526,10 @@ public class AppDbContext : DbContext
             entity.HasOne<User>()
                 .WithMany()
                 .HasForeignKey(item => item.EmployerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(item => item.CompanyOwnerUserId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<JobFamily>()
                 .WithMany()

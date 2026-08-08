@@ -13,6 +13,7 @@ public sealed class CompanyTeamService : ICompanyTeamService
 {
     private readonly AppDbContext _dbContext;
     private readonly IRegistrationEmailSender _emailSender;
+    private readonly ICompanyAccessService _companyAccessService;
     private readonly TeamInvitationOptions _options;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<CompanyTeamService> _logger;
@@ -20,12 +21,14 @@ public sealed class CompanyTeamService : ICompanyTeamService
     public CompanyTeamService(
         AppDbContext dbContext,
         IRegistrationEmailSender emailSender,
+        ICompanyAccessService companyAccessService,
         IOptions<TeamInvitationOptions> options,
         TimeProvider timeProvider,
         ILogger<CompanyTeamService> logger)
     {
         _dbContext = dbContext;
         _emailSender = emailSender;
+        _companyAccessService = companyAccessService;
         _options = options.Value;
         _timeProvider = timeProvider;
         _logger = logger;
@@ -35,7 +38,7 @@ public sealed class CompanyTeamService : ICompanyTeamService
         int ownerUserId,
         CancellationToken cancellationToken = default)
     {
-        var access = await ResolveTeamAccessAsync(
+        var access = await _companyAccessService.ResolveAsync(
             ownerUserId,
             cancellationToken);
 
@@ -49,7 +52,7 @@ public sealed class CompanyTeamService : ICompanyTeamService
         var owner = await _dbContext.Users
             .AsNoTracking()
             .FirstOrDefaultAsync(
-                item => item.Id == access.OwnerUserId,
+                item => item.Id == access.CompanyOwnerUserId,
                 cancellationToken);
 
         if (owner is null)
@@ -63,7 +66,7 @@ public sealed class CompanyTeamService : ICompanyTeamService
             .AsNoTracking()
             .Include(item => item.AcceptedUser)
             .Where(item =>
-                item.OwnerUserId == access.OwnerUserId
+                item.OwnerUserId == access.CompanyOwnerUserId
                 && item.Status
                     != CompanyTeamInvitationStatuses.Removed)
             .OrderBy(item => item.CreatedAtUtc)
@@ -74,8 +77,8 @@ public sealed class CompanyTeamService : ICompanyTeamService
             Success = true,
             CompanyName = GetCompanyName(owner),
             CanManageTeam = access.CanManageTeam,
-            Members = invitations
-                .Select(ToMemberDto)
+            Members = new[] { ToFounderMemberDto(owner) }
+                .Concat(invitations.Select(ToMemberDto))
                 .ToList()
         };
     }
@@ -98,7 +101,7 @@ public sealed class CompanyTeamService : ICompanyTeamService
                 CompanyTeamErrorCodes.Validation);
         }
 
-        var access = await ResolveTeamAccessAsync(
+        var access = await _companyAccessService.ResolveAsync(
             request.OwnerUserId,
             cancellationToken);
 
@@ -111,7 +114,7 @@ public sealed class CompanyTeamService : ICompanyTeamService
 
         var owner = await _dbContext.Users
             .FirstOrDefaultAsync(
-                item => item.Id == access.OwnerUserId,
+                item => item.Id == access.CompanyOwnerUserId,
                 cancellationToken);
 
         if (owner is null)
@@ -159,7 +162,7 @@ public sealed class CompanyTeamService : ICompanyTeamService
                 .AsNoTracking()
                 .AnyAsync(
                     item =>
-                        item.OwnerUserId != access.OwnerUserId
+                        item.OwnerUserId != access.CompanyOwnerUserId
                         && item.Email == request.Email
                         && item.Status
                             == CompanyTeamInvitationStatuses.Invited
@@ -177,7 +180,7 @@ public sealed class CompanyTeamService : ICompanyTeamService
             await _dbContext.CompanyTeamInvitations
                 .FirstOrDefaultAsync(
                     item =>
-                        item.OwnerUserId == access.OwnerUserId
+                        item.OwnerUserId == access.CompanyOwnerUserId
                         && item.Email == request.Email,
                     cancellationToken);
 
@@ -193,7 +196,7 @@ public sealed class CompanyTeamService : ICompanyTeamService
         invitation ??= new CompanyTeamInvitation
         {
             Id = Guid.NewGuid(),
-            OwnerUserId = access.OwnerUserId,
+            OwnerUserId = access.CompanyOwnerUserId,
             Email = request.Email,
             CreatedAtUtc = UtcNow()
         };
@@ -329,13 +332,13 @@ public sealed class CompanyTeamService : ICompanyTeamService
                 CompanyTeamErrorCodes.NotFound);
         }
 
-        var access = await ResolveTeamAccessAsync(
+        var access = await _companyAccessService.ResolveAsync(
             actorUserId,
             cancellationToken);
 
         if (access is null
             || !access.CanManageTeam
-            || access.OwnerUserId != invitation.OwnerUserId)
+            || access.CompanyOwnerUserId != invitation.OwnerUserId)
         {
             return Failed(
                 "Yalnız Founder və ya həmin company-nin HR Admin-i team üzvünü silə bilər.",
@@ -495,66 +498,6 @@ public sealed class CompanyTeamService : ICompanyTeamService
             .UtcDateTime;
     }
 
-    private async Task<TeamAccess?> ResolveTeamAccessAsync(
-        int actorUserId,
-        CancellationToken cancellationToken)
-    {
-        if (actorUserId <= 0)
-            return null;
-
-        var actor = await _dbContext.Users
-            .AsNoTracking()
-            .FirstOrDefaultAsync(
-                item => item.Id == actorUserId,
-                cancellationToken);
-
-        if (actor is null
-            || !string.Equals(
-                actor.AccountType,
-                "employer",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        var memberships =
-            await _dbContext.CompanyTeamInvitations
-                .AsNoTracking()
-                .Where(item =>
-                    item.AcceptedUserId == actorUserId)
-                .OrderByDescending(item => item.AcceptedAtUtc)
-                .Select(item => new
-                {
-                    item.OwnerUserId,
-                    item.Role,
-                    item.Status
-                })
-                .ToListAsync(cancellationToken);
-
-        var activeMembership = memberships.FirstOrDefault(
-            item => item.Status
-                == CompanyTeamInvitationStatuses.Active);
-
-        if (activeMembership is not null)
-        {
-            return new TeamAccess(
-                activeMembership.OwnerUserId,
-                string.Equals(
-                    activeMembership.Role,
-                    "HR Admin",
-                    StringComparison.OrdinalIgnoreCase));
-        }
-
-        // An employer who has ever belonged to another company is not
-        // treated as that company's Founder after removal.
-        if (memberships.Count > 0)
-            return null;
-
-        return new TeamAccess(
-            actorUserId,
-            CanManageTeam: true);
-    }
-
     private static string NormalizeRole(string? role)
     {
         return role?.Trim().ToLowerInvariant() switch
@@ -609,6 +552,29 @@ public sealed class CompanyTeamService : ICompanyTeamService
         };
     }
 
+    private static CompanyTeamMemberDto ToFounderMemberDto(User owner)
+    {
+        var displayName = string.Join(
+            " ",
+            new[] { owner.Name, owner.Surname }
+                .Where(value => !string.IsNullOrWhiteSpace(value)));
+
+        return new CompanyTeamMemberDto
+        {
+            InvitationId = Guid.Empty,
+            UserId = owner.Id,
+            DisplayName = string.IsNullOrWhiteSpace(displayName)
+                ? owner.Email
+                : displayName,
+            Email = owner.Email,
+            Role = "Admin",
+            Status = CompanyTeamInvitationStatuses.Active,
+            InvitedAtUtc = owner.CreatedAt,
+            AcceptedAtUtc = owner.CreatedAt,
+            IsFounder = true
+        };
+    }
+
     private static CompanyTeamResponse Failed(
         string message,
         string errorCode)
@@ -634,7 +600,4 @@ public sealed class CompanyTeamService : ICompanyTeamService
         };
     }
 
-    private sealed record TeamAccess(
-        int OwnerUserId,
-        bool CanManageTeam);
 }

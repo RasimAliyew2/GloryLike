@@ -50,7 +50,10 @@ builder.Services.AddScoped<IJobOfferService, JobOfferService>();
 builder.Services.AddScoped<IVacancyService, VacancyService>();
 builder.Services.AddScoped<ITalentRadarService, TalentRadarService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<ICompanyAccessService, CompanyAccessService>();
 builder.Services.AddScoped<ICompanyTeamService, CompanyTeamService>();
+builder.Services.AddScoped<ICompanyProfileService, CompanyProfileService>();
+builder.Services.AddScoped<IOrganizationReportsService, OrganizationReportsService>();
 builder.Services.Configure<SmtpOptions>(
     builder.Configuration.GetSection(
         SmtpOptions.SectionName));

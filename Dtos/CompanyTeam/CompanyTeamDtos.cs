@@ -51,6 +51,8 @@ public sealed class CompanyTeamMemberDto
     public DateTime InvitedAtUtc { get; set; }
 
     public DateTime? AcceptedAtUtc { get; set; }
+
+    public bool IsFounder { get; set; }
 }
 
 public sealed class ResolveCompanyTeamInvitationResponse

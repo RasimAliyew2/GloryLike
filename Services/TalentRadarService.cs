@@ -11,13 +11,16 @@ namespace GloryLikeBackend.Services;
 public sealed class TalentRadarService : ITalentRadarService
 {
     private readonly AppDbContext _dbContext;
+    private readonly ICompanyAccessService _companyAccessService;
     private readonly ILogger<TalentRadarService> _logger;
 
     public TalentRadarService(
         AppDbContext dbContext,
+        ICompanyAccessService companyAccessService,
         ILogger<TalentRadarService> logger)
     {
         _dbContext = dbContext;
+        _companyAccessService = companyAccessService;
         _logger = logger;
     }
 
@@ -25,18 +28,18 @@ public sealed class TalentRadarService : ITalentRadarService
         int employerUserId,
         CancellationToken cancellationToken = default)
     {
-        var employerExists = await _dbContext.Users
-            .AsNoTracking()
-            .AnyAsync(user => user.Id == employerUserId, cancellationToken);
+        var access = await _companyAccessService.ResolveAsync(
+            employerUserId,
+            cancellationToken);
 
-        if (!employerExists)
+        if (access is null)
             return null;
 
         var vacancies = await _dbContext.Vacancies
             .AsNoTracking()
             .Include(vacancy => vacancy.SkillRequirements)
             .Where(vacancy =>
-                vacancy.EmployerUserId == employerUserId
+                vacancy.CompanyOwnerUserId == access.CompanyOwnerUserId
                 && vacancy.Status == "Published")
             .OrderByDescending(vacancy => vacancy.CreatedAtUtc)
             .ToListAsync(cancellationToken);
@@ -68,13 +71,14 @@ public sealed class TalentRadarService : ITalentRadarService
 
         // Canonical Job join: skill sətrinin primary key-i istifadə edilmir.
         // UserSkills.JobFamilyId birbaşa Vacancies.JobFamilyId ilə INNER JOIN olunur.
-        // Eyni account Candidate/Employer rejimləri arasında switch edə bildiyi üçün
-        // employerUserId-yə bərabər UserSkills sətri də uyğun candidate sayılır.
         var candidateIds = await (
                 from userSkill in _dbContext.UserSkills.AsNoTracking()
+                join user in _dbContext.Users.AsNoTracking()
+                    on userSkill.UserId equals user.Id
                 join vacancy in _dbContext.Vacancies.AsNoTracking()
                     on userSkill.JobFamilyId equals vacancy.JobFamilyId
                 where userSkill.JobFamilyId > 0
+                      && user.AccountType == "candidate"
                       && scoredVacancyIds.Contains(vacancy.Id)
                 select userSkill.UserId)
             .Distinct()
