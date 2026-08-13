@@ -4,7 +4,7 @@ namespace GloryLikeBackend.Services.Interfaces;
 
 public interface ISkillAndJobService
 {
-    Task<List<JobFamily>> GetAllJobFamiliesAsync();
+    Task<List<JobFamilyTaxonomyDto>> GetAllJobFamiliesAsync();
 
     Task<List<SkillLookupDto>> GetAllSkillsAsync();
 

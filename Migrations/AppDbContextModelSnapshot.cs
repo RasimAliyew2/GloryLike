@@ -134,9 +134,14 @@ namespace GloryLikeBackend.Migrations
 
                     b.Property<string>("JobName")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("JobName")
+                        .IsUnique()
+                        .HasDatabaseName("UX_JobFamilies_JobName");
 
                     b.ToTable("JobFamilies");
                 });
@@ -149,18 +154,40 @@ namespace GloryLikeBackend.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("JobFamilyId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobFamilyId")
+                        .HasDatabaseName("IX_Positions_JobFamilyId");
+
+                    b.HasIndex("JobFamilyId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Positions_JobFamilyId_Name");
+
+                    b.ToTable("Positions");
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.SkillAndJob.PositionSeniority", b =>
+                {
+                    b.Property<int>("PositionId")
+                        .HasColumnType("int");
 
                     b.Property<int>("SeniorityId")
                         .HasColumnType("int");
 
-                    b.HasKey("Id");
+                    b.HasKey("PositionId", "SeniorityId");
 
-                    b.HasIndex("SeniorityId");
+                    b.HasIndex("SeniorityId")
+                        .HasDatabaseName("IX_PositionSeniorities_SeniorityId");
 
-                    b.ToTable("Positions");
+                    b.ToTable("PositionSeniorities");
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.SkillAndJob.Seniority", b =>
@@ -171,16 +198,23 @@ namespace GloryLikeBackend.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("JobFamilyId")
-                        .HasColumnType("int");
-
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("JobFamilyId");
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Seniorities_Name");
+
+                    b.HasIndex("SortOrder")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Seniorities_SortOrder");
 
                     b.ToTable("Seniorities");
                 });
@@ -198,11 +232,17 @@ namespace GloryLikeBackend.Migrations
 
                     b.Property<string>("SkillName")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PositionId");
+                    b.HasIndex("PositionId")
+                        .HasDatabaseName("IX_Skills_PositionId");
+
+                    b.HasIndex("PositionId", "SkillName")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Skills_PositionId_SkillName");
 
                     b.ToTable("Skills");
                 });
@@ -1076,29 +1116,43 @@ namespace GloryLikeBackend.Migrations
 
             modelBuilder.Entity("GloryLikeBackend.Models.SkillAndJob.Position", b =>
                 {
-                    b.HasOne("GloryLikeBackend.Models.SkillAndJob.Seniority", null)
+                    b.HasOne("GloryLikeBackend.Models.SkillAndJob.JobFamily", "JobFamily")
                         .WithMany("Positions")
+                        .HasForeignKey("JobFamilyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("JobFamily");
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.SkillAndJob.PositionSeniority", b =>
+                {
+                    b.HasOne("GloryLikeBackend.Models.SkillAndJob.Position", "Position")
+                        .WithMany("SeniorityLinks")
+                        .HasForeignKey("PositionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("GloryLikeBackend.Models.SkillAndJob.Seniority", "Seniority")
+                        .WithMany("PositionLinks")
                         .HasForeignKey("SeniorityId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
 
-            modelBuilder.Entity("GloryLikeBackend.Models.SkillAndJob.Seniority", b =>
-                {
-                    b.HasOne("GloryLikeBackend.Models.SkillAndJob.JobFamily", null)
-                        .WithMany("Seniorities")
-                        .HasForeignKey("JobFamilyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                    b.Navigation("Position");
+
+                    b.Navigation("Seniority");
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.SkillAndJob.Skill", b =>
                 {
-                    b.HasOne("GloryLikeBackend.Models.SkillAndJob.Position", null)
+                    b.HasOne("GloryLikeBackend.Models.SkillAndJob.Position", "Position")
                         .WithMany("Skills")
                         .HasForeignKey("PositionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Position");
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.Vacancy", b =>
@@ -1225,17 +1279,19 @@ namespace GloryLikeBackend.Migrations
 
             modelBuilder.Entity("GloryLikeBackend.Models.SkillAndJob.JobFamily", b =>
                 {
-                    b.Navigation("Seniorities");
+                    b.Navigation("Positions");
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.SkillAndJob.Position", b =>
                 {
+                    b.Navigation("SeniorityLinks");
+
                     b.Navigation("Skills");
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.SkillAndJob.Seniority", b =>
                 {
-                    b.Navigation("Positions");
+                    b.Navigation("PositionLinks");
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.Vacancy", b =>

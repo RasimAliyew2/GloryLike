@@ -718,32 +718,44 @@ public sealed class VacancyService : IVacancyService
                 "Seçilən Job Family SQL taxonomy-də tapılmadı.");
         }
 
-        var seniority = await _dbContext.Seniorities
-            .AsNoTracking()
-            .FirstOrDefaultAsync(
-                item =>
-                    item.Id == payload.SeniorityId
-                    && item.JobFamilyId == payload.JobFamilyId,
-                cancellationToken);
-
-        if (seniority is null)
-        {
-            return CreateVacancyResult.Invalid(
-                "Seçilən Seniority bu Job Family-yə aid deyil.");
-        }
-
         var position = await _dbContext.Positions
             .AsNoTracking()
             .FirstOrDefaultAsync(
                 item =>
                     item.Id == payload.PositionId
-                    && item.SeniorityId == payload.SeniorityId,
+                    && item.JobFamilyId == payload.JobFamilyId,
                 cancellationToken);
 
         if (position is null)
         {
             return CreateVacancyResult.Invalid(
-                "Seçilən Position bu Seniority-yə aid deyil.");
+                "Seçilən Position bu Job Family-yə aid deyil.");
+        }
+
+        var seniority = await _dbContext.Seniorities
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                item => item.Id == payload.SeniorityId,
+                cancellationToken);
+
+        if (seniority is null)
+        {
+            return CreateVacancyResult.Invalid(
+                "Seçilən Seniority SQL taxonomy-də tapılmadı.");
+        }
+
+        var positionHasSeniority = await _dbContext.PositionSeniorities
+                .AsNoTracking()
+                .AnyAsync(
+                    item =>
+                        item.PositionId == payload.PositionId
+                        && item.SeniorityId == payload.SeniorityId,
+                    cancellationToken);
+
+        if (!positionHasSeniority)
+        {
+            return CreateVacancyResult.Invalid(
+                "Seçilən Seniority bu Position-a aid deyil.");
         }
 
         var requestedSkillIds = payload.SkillRequirements
@@ -752,7 +764,9 @@ public sealed class VacancyService : IVacancyService
 
         var skillsById = await _dbContext.Skills
             .AsNoTracking()
-            .Where(skill => requestedSkillIds.Contains(skill.Id))
+            .Where(skill =>
+                requestedSkillIds.Contains(skill.Id)
+                && skill.PositionId == payload.PositionId)
             .ToDictionaryAsync(
                 skill => skill.Id,
                 cancellationToken);
@@ -763,7 +777,7 @@ public sealed class VacancyService : IVacancyService
         if (missingSkillId > 0)
         {
             return CreateVacancyResult.Invalid(
-                $"SkillId {missingSkillId} SQL taxonomy-də tapılmadı.");
+                $"SkillId {missingSkillId} seçilən Position-a aid deyil.");
         }
 
         var now = DateTime.UtcNow;
@@ -952,28 +966,12 @@ public sealed class VacancyService : IVacancyService
                 "Seçilən Job Family SQL taxonomy-də tapılmadı.");
         }
 
-        var seniority = await _dbContext.Seniorities
-            .AsNoTracking()
-            .FirstOrDefaultAsync(
-                item =>
-                    item.Id == payload.SeniorityId
-                    && item.JobFamilyId == payload.JobFamilyId,
-                cancellationToken);
-
-        if (seniority is null)
-        {
-            return UpdateVacancyResult.Invalid(
-                request.EmployerUserId,
-                vacancyId,
-                "Seçilən Seniority bu Job Family-yə aid deyil.");
-        }
-
         var position = await _dbContext.Positions
             .AsNoTracking()
             .FirstOrDefaultAsync(
                 item =>
                     item.Id == payload.PositionId
-                    && item.SeniorityId == payload.SeniorityId,
+                    && item.JobFamilyId == payload.JobFamilyId,
                 cancellationToken);
 
         if (position is null)
@@ -981,7 +979,37 @@ public sealed class VacancyService : IVacancyService
             return UpdateVacancyResult.Invalid(
                 request.EmployerUserId,
                 vacancyId,
-                "Seçilən Position bu Seniority-yə aid deyil.");
+                "Seçilən Position bu Job Family-yə aid deyil.");
+        }
+
+        var seniority = await _dbContext.Seniorities
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                item => item.Id == payload.SeniorityId,
+                cancellationToken);
+
+        if (seniority is null)
+        {
+            return UpdateVacancyResult.Invalid(
+                request.EmployerUserId,
+                vacancyId,
+                "Seçilən Seniority SQL taxonomy-də tapılmadı.");
+        }
+
+        var positionHasSeniority = await _dbContext.PositionSeniorities
+                .AsNoTracking()
+                .AnyAsync(
+                    item =>
+                        item.PositionId == payload.PositionId
+                        && item.SeniorityId == payload.SeniorityId,
+                    cancellationToken);
+
+        if (!positionHasSeniority)
+        {
+            return UpdateVacancyResult.Invalid(
+                request.EmployerUserId,
+                vacancyId,
+                "Seçilən Seniority bu Position-a aid deyil.");
         }
 
         var requestedSkillIds = payload.SkillRequirements
@@ -990,7 +1018,9 @@ public sealed class VacancyService : IVacancyService
 
         var skillsById = await _dbContext.Skills
             .AsNoTracking()
-            .Where(skill => requestedSkillIds.Contains(skill.Id))
+            .Where(skill =>
+                requestedSkillIds.Contains(skill.Id)
+                && skill.PositionId == payload.PositionId)
             .ToDictionaryAsync(
                 skill => skill.Id,
                 cancellationToken);
@@ -1003,7 +1033,7 @@ public sealed class VacancyService : IVacancyService
             return UpdateVacancyResult.Invalid(
                 request.EmployerUserId,
                 vacancyId,
-                $"SkillId {missingSkillId} SQL taxonomy-də tapılmadı.");
+                $"SkillId {missingSkillId} seçilən Position-a aid deyil.");
         }
 
         ApplyEditableValues(

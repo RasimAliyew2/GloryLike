@@ -1,14 +1,12 @@
-﻿namespace GloryLikeBackend.Models.SkillAndJob
+namespace GloryLikeBackend.Models.SkillAndJob;
+
+public class Seniority
 {
-    public class Seniority
-    {
-        public int Id { get; set; }
+    public int Id { get; set; }
 
-        public string Name { get; set; }
+    public string Name { get; set; } = string.Empty;
 
-        public int JobFamilyId { get; set; }
+    public int SortOrder { get; set; }
 
-        public List<Position> Positions { get; set; } = new();
-
-    }
+    public List<PositionSeniority> PositionLinks { get; set; } = new();
 }

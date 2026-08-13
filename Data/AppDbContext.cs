@@ -36,6 +36,8 @@ public class AppDbContext : DbContext
 
     public DbSet<Position> Positions { get; set; }
 
+    public DbSet<PositionSeniority> PositionSeniorities { get; set; }
+
     public DbSet<Skill> Skills { get; set; }
 
     public DbSet<JobOffer> JobOffers { get; set; }
@@ -195,6 +197,7 @@ public class AppDbContext : DbContext
 
         ConfigureCompanyTeamInvitations(modelBuilder);
         ConfigureCompanyProfiles(modelBuilder);
+        ConfigureJobTaxonomy(modelBuilder);
 
         modelBuilder.Entity<SkillQuestionnaire>(entity =>
         {
@@ -256,6 +259,119 @@ public class AppDbContext : DbContext
 
         ConfigureUserSkills(modelBuilder);
         ConfigureVacancies(modelBuilder);
+    }
+
+    private static void ConfigureJobTaxonomy(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<JobFamily>(entity =>
+        {
+            entity.ToTable("JobFamilies");
+            entity.HasKey(item => item.Id);
+
+            entity.Property(item => item.JobName)
+                .HasMaxLength(150)
+                .IsRequired();
+
+            entity.HasIndex(item => item.JobName)
+                .IsUnique()
+                .HasDatabaseName("UX_JobFamilies_JobName");
+        });
+
+        modelBuilder.Entity<Position>(entity =>
+        {
+            entity.ToTable("Positions");
+            entity.HasKey(item => item.Id);
+
+            entity.Property(item => item.Name)
+                .HasMaxLength(150)
+                .IsRequired();
+
+            entity.HasIndex(item => item.JobFamilyId)
+                .HasDatabaseName("IX_Positions_JobFamilyId");
+
+            entity.HasIndex(item => new
+                {
+                    item.JobFamilyId,
+                    item.Name
+                })
+                .IsUnique()
+                .HasDatabaseName("UX_Positions_JobFamilyId_Name");
+
+            entity.HasOne(item => item.JobFamily)
+                .WithMany(item => item.Positions)
+                .HasForeignKey(item => item.JobFamilyId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Seniority>(entity =>
+        {
+            entity.ToTable("Seniorities");
+            entity.HasKey(item => item.Id);
+
+            entity.Property(item => item.Name)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(item => item.SortOrder)
+                .IsRequired();
+
+            entity.HasIndex(item => item.Name)
+                .IsUnique()
+                .HasDatabaseName("UX_Seniorities_Name");
+
+            entity.HasIndex(item => item.SortOrder)
+                .IsUnique()
+                .HasDatabaseName("UX_Seniorities_SortOrder");
+        });
+
+        modelBuilder.Entity<PositionSeniority>(entity =>
+        {
+            entity.ToTable("PositionSeniorities");
+            entity.HasKey(item => new
+                {
+                    item.PositionId,
+                    item.SeniorityId
+                });
+
+            entity.HasIndex(item => item.SeniorityId)
+                .HasDatabaseName("IX_PositionSeniorities_SeniorityId");
+
+            entity.HasOne(item => item.Position)
+                .WithMany(item => item.SeniorityLinks)
+                .HasForeignKey(item => item.PositionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(item => item.Seniority)
+                .WithMany(item => item.PositionLinks)
+                .HasForeignKey(item => item.SeniorityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Skill>(entity =>
+        {
+            entity.ToTable("Skills");
+            entity.HasKey(item => item.Id);
+
+            entity.Property(item => item.SkillName)
+                .HasMaxLength(150)
+                .IsRequired();
+
+            entity.HasIndex(item => item.PositionId)
+                .HasDatabaseName("IX_Skills_PositionId");
+
+            entity.HasIndex(item => new
+                {
+                    item.PositionId,
+                    item.SkillName
+                })
+                .IsUnique()
+                .HasDatabaseName("UX_Skills_PositionId_SkillName");
+
+            entity.HasOne(item => item.Position)
+                .WithMany(item => item.Skills)
+                .HasForeignKey(item => item.PositionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 
     private static void ConfigureCompanyTeamInvitations(

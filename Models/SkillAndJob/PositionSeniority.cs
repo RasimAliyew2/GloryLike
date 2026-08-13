@@ -1,12 +1,12 @@
 namespace GloryLikeBackend.Models.SkillAndJob;
 
-public class Skill
+public sealed class PositionSeniority
 {
-    public int Id { get; set; }
-
-    public string SkillName { get; set; } = string.Empty;
-
     public int PositionId { get; set; }
 
     public Position Position { get; set; } = null!;
+
+    public int SeniorityId { get; set; }
+
+    public Seniority Seniority { get; set; } = null!;
 }
