@@ -1,9 +1,9 @@
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
 
--- Empty-database seed for the normalized taxonomy schema.
--- Do not run this against the old duplicated production schema.
--- Use 20260811_NormalizeJobTaxonomy.sql for an existing database.
+-- Seed for an installed normalized taxonomy schema.
+-- Seniorities may already contain the five canonical rows created by the
+-- production normalization script. Positions, links and Skills must be empty.
 
 BEGIN TRY
     BEGIN TRANSACTION;
@@ -34,25 +34,46 @@ BEGIN TRY
         THROW 51101, 'JobFamilies IDs 1-18 must exist before seeding.', 1;
     END;
 
-    IF EXISTS (SELECT 1 FROM dbo.Seniorities)
-       OR EXISTS (SELECT 1 FROM dbo.Positions)
+    IF EXISTS (SELECT 1 FROM dbo.Positions)
        OR EXISTS (SELECT 1 FROM dbo.PositionSeniorities)
        OR EXISTS (SELECT 1 FROM dbo.Skills)
     BEGIN
-        THROW 51102, 'Seed stopped because taxonomy tables are not empty.', 1;
+        THROW 51102, 'Seed stopped because Positions, PositionSeniorities or Skills is not empty.', 1;
     END;
 
-    SET IDENTITY_INSERT dbo.Seniorities ON;
+    IF NOT EXISTS (SELECT 1 FROM dbo.Seniorities)
+    BEGIN
+        INSERT INTO dbo.Seniorities ([Name], SortOrder)
+        VALUES
+            (N'Junior', 1),
+            (N'Middle', 2),
+            (N'Senior', 3),
+            (N'Lead', 4),
+            (N'Head', 5);
+    END;
 
-    INSERT INTO dbo.Seniorities (Id, [Name], SortOrder)
-    VALUES
-        (1, N'Head', 5),
-        (2, N'Junior', 1),
-        (3, N'Lead', 4),
-        (4, N'Middle', 2),
-        (5, N'Senior', 3);
+    IF (SELECT COUNT(*) FROM dbo.Seniorities) <> 5
+       OR EXISTS
+       (
+           SELECT desired.[Name], desired.SortOrder
+           FROM
+           (
+               VALUES
+                   (N'Junior', 1),
+                   (N'Middle', 2),
+                   (N'Senior', 3),
+                   (N'Lead', 4),
+                   (N'Head', 5)
+           ) AS desired([Name], SortOrder)
+           LEFT JOIN dbo.Seniorities AS seniority
+               ON seniority.[Name] = desired.[Name]
+              AND seniority.SortOrder = desired.SortOrder
+           WHERE seniority.Id IS NULL
+       )
+    BEGIN
+        THROW 51103, 'Seniorities must contain exactly Junior, Middle, Senior, Lead and Head.', 1;
+    END;
 
-    SET IDENTITY_INSERT dbo.Seniorities OFF;
     SET IDENTITY_INSERT dbo.Positions ON;
 
     INSERT INTO dbo.Positions (Id, [Name], JobFamilyId)
@@ -151,7 +172,13 @@ BEGIN TRY
 
     SET IDENTITY_INSERT dbo.Positions OFF;
 
-    INSERT INTO dbo.PositionSeniorities (PositionId, SeniorityId)
+    CREATE TABLE #PositionSenioritySeed
+    (
+        PositionId INT NOT NULL,
+        LegacySeniorityId INT NOT NULL
+    );
+
+    INSERT INTO #PositionSenioritySeed (PositionId, LegacySeniorityId)
     VALUES
         (1, 1),
         (1, 2),
@@ -609,6 +636,20 @@ BEGIN TRY
         (443, 4),
         (443, 5);
 
+    INSERT INTO dbo.PositionSeniorities (PositionId, SeniorityId)
+    SELECT
+        seed.PositionId,
+        seniority.Id
+    FROM #PositionSenioritySeed AS seed
+    INNER JOIN dbo.Seniorities AS seniority
+        ON seniority.[Name] = CASE seed.LegacySeniorityId
+            WHEN 1 THEN N'Head'
+            WHEN 2 THEN N'Junior'
+            WHEN 3 THEN N'Lead'
+            WHEN 4 THEN N'Middle'
+            WHEN 5 THEN N'Senior'
+        END;
+
     SET IDENTITY_INSERT dbo.Skills ON;
 
     INSERT INTO dbo.Skills (Id, SkillName, PositionId)
@@ -853,9 +894,17 @@ BEGIN TRY
 
     SET IDENTITY_INSERT dbo.Skills OFF;
 
+    IF (SELECT COUNT(*) FROM dbo.Seniorities) <> 5
+       OR (SELECT COUNT(*) FROM dbo.Positions) <> 91
+       OR (SELECT COUNT(*) FROM dbo.PositionSeniorities) <> 455
+       OR (SELECT COUNT(*) FROM dbo.Skills) <> 237
+    BEGIN
+        THROW 51104, 'Post-check failed: expected 5 Seniorities, 91 Positions, 455 links and 237 Skills.', 1;
+    END;
+
     COMMIT TRANSACTION;
 
-    SELECT N'Seniorities' AS EntityName, COUNT(*) AS RowCount
+    SELECT N'Seniorities' AS EntityName, COUNT(*) AS TotalRows
     FROM dbo.Seniorities
     UNION ALL
     SELECT N'Positions', COUNT(*)

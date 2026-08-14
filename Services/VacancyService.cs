@@ -764,9 +764,7 @@ public sealed class VacancyService : IVacancyService
 
         var skillsById = await _dbContext.Skills
             .AsNoTracking()
-            .Where(skill =>
-                requestedSkillIds.Contains(skill.Id)
-                && skill.PositionId == payload.PositionId)
+            .Where(skill => requestedSkillIds.Contains(skill.Id))
             .ToDictionaryAsync(
                 skill => skill.Id,
                 cancellationToken);
@@ -777,7 +775,7 @@ public sealed class VacancyService : IVacancyService
         if (missingSkillId > 0)
         {
             return CreateVacancyResult.Invalid(
-                $"SkillId {missingSkillId} seçilən Position-a aid deyil.");
+                $"SkillId {missingSkillId} SQL skill kataloqunda tapılmadı.");
         }
 
         var now = DateTime.UtcNow;
@@ -1018,9 +1016,7 @@ public sealed class VacancyService : IVacancyService
 
         var skillsById = await _dbContext.Skills
             .AsNoTracking()
-            .Where(skill =>
-                requestedSkillIds.Contains(skill.Id)
-                && skill.PositionId == payload.PositionId)
+            .Where(skill => requestedSkillIds.Contains(skill.Id))
             .ToDictionaryAsync(
                 skill => skill.Id,
                 cancellationToken);
@@ -1033,7 +1029,7 @@ public sealed class VacancyService : IVacancyService
             return UpdateVacancyResult.Invalid(
                 request.EmployerUserId,
                 vacancyId,
-                $"SkillId {missingSkillId} seçilən Position-a aid deyil.");
+                $"SkillId {missingSkillId} SQL skill kataloqunda tapılmadı.");
         }
 
         ApplyEditableValues(

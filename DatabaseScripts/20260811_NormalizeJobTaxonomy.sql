@@ -50,15 +50,6 @@ BEGIN TRY
         THROW 51002, 'Seniorities contains an empty or unsupported level name.', 1;
     END;
 
-    IF
-    (
-        SELECT COUNT(DISTINCT LTRIM(RTRIM([Name])))
-        FROM dbo.Seniorities
-    ) <> 5
-    BEGIN
-        THROW 51003, 'Expected exactly five unique seniority names.', 1;
-    END;
-
     IF EXISTS
     (
         SELECT 1
@@ -216,11 +207,14 @@ BEGIN TRY
         ON canonical.NewPositionId = positionMap.NewPositionId
        AND canonical.SkillName = LTRIM(RTRIM(skill.SkillName));
 
-    UPDATE position
-    SET position.JobFamilyId = positionMap.JobFamilyId
-    FROM dbo.Positions AS position
-    INNER JOIN #PositionMap AS positionMap
-        ON positionMap.OldPositionId = position.Id;
+    -- JobFamilyId is added earlier in this transaction. Compile this statement
+    -- only after SQL Server can see the new column in the table metadata.
+    EXEC sys.sp_executesql N'
+        UPDATE position
+        SET position.JobFamilyId = positionMap.JobFamilyId
+        FROM dbo.Positions AS position
+        INNER JOIN #PositionMap AS positionMap
+            ON positionMap.OldPositionId = position.Id;';
 
     IF OBJECT_ID(N'dbo.Vacancies', N'U') IS NOT NULL
     BEGIN
@@ -335,17 +329,55 @@ BEGIN TRY
         ON seniorityMap.OldSeniorityId = seniority.Id
     WHERE seniorityMap.OldSeniorityId <> seniorityMap.NewSeniorityId;
 
-    UPDATE seniority
-    SET
-        seniority.[Name] = LTRIM(RTRIM(seniority.[Name])),
-        seniority.SortOrder = CASE LTRIM(RTRIM(seniority.[Name]))
-            WHEN N'Junior' THEN 1
-            WHEN N'Middle' THEN 2
-            WHEN N'Senior' THEN 3
-            WHEN N'Lead' THEN 4
-            WHEN N'Head' THEN 5
-        END
-    FROM dbo.Seniorities AS seniority;
+    -- The legacy production data may not contain all five levels. Add any
+    -- missing canonical level after old references have been mapped. The
+    -- temporary JobFamilyId value is removed later in this transaction.
+    -- SortOrder is also new in this transaction, so defer compilation until
+    -- after ALTER TABLE has added it.
+    EXEC sys.sp_executesql N'
+        INSERT INTO dbo.Seniorities
+        (
+            [Name],
+            JobFamilyId,
+            SortOrder
+        )
+        SELECT
+            desired.[Name],
+            COALESCE((SELECT MIN(Id) FROM dbo.JobFamilies), 0),
+            desired.SortOrder
+        FROM
+        (
+            VALUES
+                (N''Junior'', 1),
+                (N''Middle'', 2),
+                (N''Senior'', 3),
+                (N''Lead'', 4),
+                (N''Head'', 5)
+        ) AS desired([Name], SortOrder)
+        WHERE NOT EXISTS
+        (
+            SELECT 1
+            FROM dbo.Seniorities AS existing
+            WHERE LTRIM(RTRIM(existing.[Name])) = desired.[Name]
+        );
+
+        UPDATE seniority
+        SET
+            seniority.[Name] = CASE LTRIM(RTRIM(seniority.[Name]))
+                WHEN N''Junior'' THEN N''Junior''
+                WHEN N''Middle'' THEN N''Middle''
+                WHEN N''Senior'' THEN N''Senior''
+                WHEN N''Lead'' THEN N''Lead''
+                WHEN N''Head'' THEN N''Head''
+            END,
+            seniority.SortOrder = CASE LTRIM(RTRIM(seniority.[Name]))
+                WHEN N''Junior'' THEN 1
+                WHEN N''Middle'' THEN 2
+                WHEN N''Senior'' THEN 3
+                WHEN N''Lead'' THEN 4
+                WHEN N''Head'' THEN 5
+            END
+        FROM dbo.Seniorities AS seniority;';
 
     IF EXISTS
     (
@@ -367,10 +399,12 @@ BEGIN TRY
 
     ALTER TABLE dbo.JobFamilies ALTER COLUMN JobName NVARCHAR(150) NOT NULL;
     ALTER TABLE dbo.Positions ALTER COLUMN [Name] NVARCHAR(150) NOT NULL;
-    ALTER TABLE dbo.Positions ALTER COLUMN JobFamilyId INT NOT NULL;
+    EXEC sys.sp_executesql N'
+        ALTER TABLE dbo.Positions ALTER COLUMN JobFamilyId INT NOT NULL;';
     ALTER TABLE dbo.Positions DROP COLUMN SeniorityId;
     ALTER TABLE dbo.Seniorities ALTER COLUMN [Name] NVARCHAR(50) NOT NULL;
-    ALTER TABLE dbo.Seniorities ALTER COLUMN SortOrder INT NOT NULL;
+    EXEC sys.sp_executesql N'
+        ALTER TABLE dbo.Seniorities ALTER COLUMN SortOrder INT NOT NULL;';
     ALTER TABLE dbo.Seniorities DROP COLUMN JobFamilyId;
     ALTER TABLE dbo.Skills ALTER COLUMN SkillName NVARCHAR(150) NOT NULL;
 
@@ -396,17 +430,19 @@ BEGIN TRY
     CREATE UNIQUE INDEX UX_JobFamilies_JobName
         ON dbo.JobFamilies(JobName);
 
-    CREATE INDEX IX_Positions_JobFamilyId
-        ON dbo.Positions(JobFamilyId);
+    EXEC sys.sp_executesql N'
+        CREATE INDEX IX_Positions_JobFamilyId
+            ON dbo.Positions(JobFamilyId);
 
-    CREATE UNIQUE INDEX UX_Positions_JobFamilyId_Name
-        ON dbo.Positions(JobFamilyId, [Name]);
+        CREATE UNIQUE INDEX UX_Positions_JobFamilyId_Name
+            ON dbo.Positions(JobFamilyId, [Name]);';
 
     CREATE UNIQUE INDEX UX_Seniorities_Name
         ON dbo.Seniorities([Name]);
 
-    CREATE UNIQUE INDEX UX_Seniorities_SortOrder
-        ON dbo.Seniorities(SortOrder);
+    EXEC sys.sp_executesql N'
+        CREATE UNIQUE INDEX UX_Seniorities_SortOrder
+            ON dbo.Seniorities(SortOrder);';
 
     CREATE INDEX IX_PositionSeniorities_SeniorityId
         ON dbo.PositionSeniorities(SeniorityId);
@@ -414,10 +450,11 @@ BEGIN TRY
     CREATE UNIQUE INDEX UX_Skills_PositionId_SkillName
         ON dbo.Skills(PositionId, SkillName);
 
-    ALTER TABLE dbo.Positions
-        ADD CONSTRAINT FK_Positions_JobFamilies_JobFamilyId
-        FOREIGN KEY (JobFamilyId)
-        REFERENCES dbo.JobFamilies(Id);
+    EXEC sys.sp_executesql N'
+        ALTER TABLE dbo.Positions
+            ADD CONSTRAINT FK_Positions_JobFamilies_JobFamilyId
+            FOREIGN KEY (JobFamilyId)
+            REFERENCES dbo.JobFamilies(Id);';
 
     ALTER TABLE dbo.Skills
         ADD CONSTRAINT FK_Skills_Positions_PositionId
@@ -480,7 +517,7 @@ BEGIN TRY
 
     COMMIT TRANSACTION;
 
-    SELECT N'Seniorities' AS EntityName, COUNT(*) AS RowCount
+    SELECT N'Seniorities' AS EntityName, COUNT(*) AS TotalRows
     FROM dbo.Seniorities
     UNION ALL
     SELECT N'Positions', COUNT(*)
