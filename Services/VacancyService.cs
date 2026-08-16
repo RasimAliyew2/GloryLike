@@ -90,13 +90,18 @@ public sealed class VacancyService : IVacancyService
         if (!candidateExists)
             return null;
 
+        var candidateJobs = await _dbContext.UserJobs
+            .AsNoTracking()
+            .Where(job => job.UserId == candidateUserId)
+            .ToListAsync(cancellationToken);
+
         var candidateSkills = await _dbContext.UserSkills
             .AsNoTracking()
             .Where(skill => skill.UserId == candidateUserId)
             .ToListAsync(cancellationToken);
 
-        var jobFamilyIds = candidateSkills
-            .Select(skill => skill.JobFamilyId)
+        var jobFamilyIds = candidateJobs
+            .Select(job => job.JobFamilyId)
             .Where(jobFamilyId => jobFamilyId > 0)
             .Distinct()
             .ToList();
@@ -106,11 +111,11 @@ public sealed class VacancyService : IVacancyService
             Success = true,
             CandidateUserId = candidateUserId,
             CandidateJobFamilyIds = jobFamilyIds,
-            CandidateJobFamilyNames = candidateSkills
-                .Where(skill =>
-                    skill.JobFamilyId > 0
-                    && !string.IsNullOrWhiteSpace(skill.JobFamilyName))
-                .GroupBy(skill => skill.JobFamilyId)
+            CandidateJobFamilyNames = candidateJobs
+                .Where(job =>
+                    job.JobFamilyId > 0
+                    && !string.IsNullOrWhiteSpace(job.JobFamilyName))
+                .GroupBy(job => job.JobFamilyId)
                 .Select(group => group.First().JobFamilyName.Trim())
                 .OrderBy(name => name)
                 .ToList()
@@ -119,7 +124,7 @@ public sealed class VacancyService : IVacancyService
         if (jobFamilyIds.Count == 0)
         {
             response.Message =
-                "Candidate UserSkills məlumatında JobFamilyId tapılmadı.";
+                "Candidate UserJobs məlumatında Job tapılmadı.";
             return response;
         }
 
@@ -587,13 +592,13 @@ public sealed class VacancyService : IVacancyService
                 "Bu vacancy hazırda müraciət üçün aktiv deyil.");
         }
 
-        var hasMatchingJob = await _dbContext.UserSkills
+        var hasMatchingJob = await _dbContext.UserJobs
             .AsNoTracking()
             .AnyAsync(
-                skill =>
-                    skill.UserId == candidateUserId
-                    && skill.JobFamilyId > 0
-                    && skill.JobFamilyId == vacancy.JobFamilyId,
+                job =>
+                    job.UserId == candidateUserId
+                    && job.JobFamilyId > 0
+                    && job.JobFamilyId == vacancy.JobFamilyId,
                 cancellationToken);
 
         if (!hasMatchingJob)

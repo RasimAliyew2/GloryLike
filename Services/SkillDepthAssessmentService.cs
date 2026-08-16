@@ -64,6 +64,27 @@ public class SkillDepthAssessmentService : ISkillDepthAssessmentService
 
             if (answer.SelectedOptionIds.Count == 0)
                 throw new ArgumentException($"{answer.QuestionId} üçün ən azı 1 option seçilməlidir.");
+
+            answer.QuestionId = answer.QuestionId.Trim();
+            answer.SelectedOptionIds = answer.SelectedOptionIds
+                .Where(optionId => !string.IsNullOrWhiteSpace(optionId))
+                .Select(optionId => optionId.Trim())
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            if (answer.SelectedOptionIds.Count == 0)
+                throw new ArgumentException($"{answer.QuestionId} üçün valid option göndərilməyib.");
+        }
+
+        var duplicateQuestionId = request.Answers
+            .GroupBy(answer => answer.QuestionId.Trim())
+            .FirstOrDefault(group => group.Count() > 1)
+            ?.Key;
+
+        if (!string.IsNullOrWhiteSpace(duplicateQuestionId))
+        {
+            throw new ArgumentException(
+                $"Eyni question bir neçə dəfə göndərilib: {duplicateQuestionId}");
         }
     }
 
@@ -79,6 +100,19 @@ public class SkillDepthAssessmentService : ISkillDepthAssessmentService
             .Where(q => !q.HiddenByDefault || revealedQuestionIds.Contains(q.Id))
             .Select(q => q.Id)
             .ToHashSet();
+
+        var unansweredQuestionIds = visibleQuestionIds
+            .Where(questionId =>
+                !answersByQuestionId.ContainsKey(questionId))
+            .OrderBy(questionId => questionId)
+            .ToList();
+
+        if (unansweredQuestionIds.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Bütün görünən suallar cavablandırılmalıdır: "
+                + string.Join(", ", unansweredQuestionIds));
+        }
 
         var selectedOptions = new List<QuestionnaireOptionDto>();
 

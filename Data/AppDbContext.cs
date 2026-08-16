@@ -46,6 +46,8 @@ public class AppDbContext : DbContext
 
     public DbSet<UserSkill> UserSkills { get; set; }
 
+    public DbSet<UserJob> UserJobs { get; set; }
+
     public DbSet<Vacancy> Vacancies { get; set; }
 
     public DbSet<VacancyApplication> VacancyApplications { get; set; }
@@ -258,6 +260,7 @@ public class AppDbContext : DbContext
         });
 
         ConfigureUserSkills(modelBuilder);
+        ConfigureUserJobs(modelBuilder);
         ConfigureVacancies(modelBuilder);
     }
 
@@ -468,6 +471,34 @@ public class AppDbContext : DbContext
                 })
                 .IsUnique()
                 .HasDatabaseName("UX_UserSkills_UserId_SkillName");
+
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(item => item.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<JobFamily>()
+                .WithMany()
+                .HasForeignKey(item => item.JobFamilyId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigureUserJobs(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<UserJob>(entity =>
+        {
+            entity.ToTable("UserJobs");
+            entity.HasKey(item => item.Id);
+
+            entity.Property(item => item.JobFamilyName)
+                .HasMaxLength(150)
+                .IsRequired();
+
+            entity.HasIndex(item => item.UserId)
+                .IsUnique()
+                .HasDatabaseName("UX_UserJobs_UserId");
+            entity.HasIndex(item => item.JobFamilyId)
+                .HasDatabaseName("IX_UserJobs_JobFamilyId");
 
             entity.HasOne<User>()
                 .WithMany()

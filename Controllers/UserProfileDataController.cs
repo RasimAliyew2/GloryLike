@@ -47,6 +47,37 @@ public class UserProfileDataController : ControllerBase
         if (request.UserId <= 0)
             return BadRequest(Failed(request.UserId, "UserId düzgün deyil."));
 
+        UserJobProfileDto? jobToSave = null;
+        if (request.Job is not null)
+        {
+            if (request.Job.JobFamilyId <= 0)
+            {
+                return BadRequest(Failed(
+                    request.UserId,
+                    "Job üçün JobFamilyId göndərilməyib."));
+            }
+
+            var canonicalJobName = await _dbContext.JobFamilies
+                .AsNoTracking()
+                .Where(jobFamily =>
+                    jobFamily.Id == request.Job.JobFamilyId)
+                .Select(jobFamily => jobFamily.JobName)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(canonicalJobName))
+            {
+                return BadRequest(Failed(
+                    request.UserId,
+                    $"JobFamilyId={request.Job.JobFamilyId} JobFamilies cədvəlində tapılmadı."));
+            }
+
+            jobToSave = new UserJobProfileDto
+            {
+                JobFamilyId = request.Job.JobFamilyId,
+                JobFamilyName = canonicalJobName.Trim()
+            };
+        }
+
         var skillsToSave = request.Skills
             .Where(skill => !string.IsNullOrWhiteSpace(skill.SkillName))
             .ToList();
@@ -98,6 +129,39 @@ public class UserProfileDataController : ControllerBase
             {
                 await transaction.RollbackAsync(cancellationToken);
                 return NotFound(Failed(request.UserId, "İstifadəçi tapılmadı."));
+            }
+
+            if (jobToSave is not null)
+            {
+                await ExecuteAsync(
+                    connection,
+                    transaction,
+                    @"UPDATE dbo.UserJobs
+                    SET
+                        JobFamilyId = @JobFamilyId,
+                        JobFamilyName = @JobFamilyName,
+                        UpdatedAt = SYSUTCDATETIME()
+                    WHERE UserId = @UserId;
+
+                    IF @@ROWCOUNT = 0
+                    BEGIN
+                        INSERT INTO dbo.UserJobs
+                        (
+                            UserId, JobFamilyId, JobFamilyName,
+                            CreatedAt, UpdatedAt
+                        )
+                        VALUES
+                        (
+                            @UserId, @JobFamilyId, @JobFamilyName,
+                            SYSUTCDATETIME(), SYSUTCDATETIME()
+                        );
+                    END;",
+                    cancellationToken,
+                    ("@UserId", request.UserId),
+                    ("@JobFamilyId", jobToSave.JobFamilyId),
+                    ("@JobFamilyName", Normalize(
+                        jobToSave.JobFamilyName,
+                        150)));
             }
 
             await ExecuteAsync(
@@ -236,6 +300,28 @@ public class UserProfileDataController : ControllerBase
         {
             UserId = userId
         };
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = @"SELECT TOP (1)
+                    JobFamilyId, JobFamilyName
+                FROM dbo.UserJobs
+                WHERE UserId = @UserId;";
+            AddParameter(command, "@UserId", userId);
+
+            await using var reader = await command.ExecuteReaderAsync(
+                cancellationToken);
+
+            if (await reader.ReadAsync(cancellationToken))
+            {
+                response.Job = new UserJobProfileDto
+                {
+                    JobFamilyId = GetInt(reader, "JobFamilyId"),
+                    JobFamilyName = GetString(reader, "JobFamilyName")
+                };
+            }
+        }
 
         await using (var command = connection.CreateCommand())
         {

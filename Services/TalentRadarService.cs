@@ -69,18 +69,18 @@ public sealed class TalentRadarService : ITalentRadarService
             .Select(template => template.Vacancy.Id)
             .ToList();
 
-        // Canonical Job join: skill sətrinin primary key-i istifadə edilmir.
-        // UserSkills.JobFamilyId birbaşa Vacancies.JobFamilyId ilə INNER JOIN olunur.
+        // Candidate-in seçdiyi Job ayrıca UserJobs cədvəlində saxlanılır.
+        // Skill-lərin taxonomy mənbəyi Job matching qərarına təsir etmir.
         var candidateIds = await (
-                from userSkill in _dbContext.UserSkills.AsNoTracking()
+                from userJob in _dbContext.UserJobs.AsNoTracking()
                 join user in _dbContext.Users.AsNoTracking()
-                    on userSkill.UserId equals user.Id
+                    on userJob.UserId equals user.Id
                 join vacancy in _dbContext.Vacancies.AsNoTracking()
-                    on userSkill.JobFamilyId equals vacancy.JobFamilyId
-                where userSkill.JobFamilyId > 0
+                    on userJob.JobFamilyId equals vacancy.JobFamilyId
+                where userJob.JobFamilyId > 0
                       && user.AccountType == "candidate"
                       && scoredVacancyIds.Contains(vacancy.Id)
-                select userSkill.UserId)
+                select userJob.UserId)
             .Distinct()
             .ToListAsync(cancellationToken);
 
@@ -95,25 +95,32 @@ public sealed class TalentRadarService : ITalentRadarService
             .Where(skill => candidateIds.Contains(skill.UserId))
             .ToListAsync(cancellationToken);
 
+        var candidateJobs = await _dbContext.UserJobs
+            .AsNoTracking()
+            .Where(job => candidateIds.Contains(job.UserId))
+            .ToDictionaryAsync(job => job.UserId, cancellationToken);
+
         var users = await _dbContext.Users
             .AsNoTracking()
             .Where(user => candidateIds.Contains(user.Id))
             .ToDictionaryAsync(user => user.Id, cancellationToken);
 
-        foreach (var skillGroup in candidateSkills.GroupBy(skill => skill.UserId))
+        foreach (var candidateId in candidateIds)
         {
-            if (!users.TryGetValue(skillGroup.Key, out var user))
+            if (!users.TryGetValue(candidateId, out var user)
+                || !candidateJobs.TryGetValue(candidateId, out var candidateJob))
+            {
                 continue;
+            }
 
-            var skills = skillGroup.ToList();
-            var candidateJobFamilyIds = skills
-                .Select(skill => skill.JobFamilyId)
-                .Where(jobFamilyId => jobFamilyId > 0)
-                .ToHashSet();
+            var skills = candidateSkills
+                .Where(skill => skill.UserId == candidateId)
+                .ToList();
 
             var matchingTemplates = templates
-                .Where(template => candidateJobFamilyIds.Contains(
-                    template.Vacancy.JobFamilyId))
+                .Where(template =>
+                    template.Vacancy.JobFamilyId
+                        == candidateJob.JobFamilyId)
                 .ToList();
 
             var scoreMap = BuildCandidateScoreMap(skills);
@@ -158,7 +165,8 @@ public sealed class TalentRadarService : ITalentRadarService
                 Name = BuildCandidateName(user),
                 CurrentRole = ResolveCurrentRole(
                     skills,
-                    bestRole.Template.Vacancy.JobFamilyId),
+                    candidateJob.JobFamilyId,
+                    candidateJob.JobFamilyName),
                 JobFamilyName = bestRole.Template.Vacancy.JobFamilyName,
                 BestVacancyId = bestRole.Template.Vacancy.Id,
                 PlatformVacancyId = bestRole.Template.Vacancy.PlatformVacancyId,
@@ -378,7 +386,8 @@ public sealed class TalentRadarService : ITalentRadarService
 
     private static string ResolveCurrentRole(
         IReadOnlyCollection<UserSkill> skills,
-        int jobFamilyId)
+        int jobFamilyId,
+        string fallbackJobFamilyName)
     {
         var representative = skills
             .Where(skill => skill.JobFamilyId == jobFamilyId)
@@ -387,7 +396,11 @@ public sealed class TalentRadarService : ITalentRadarService
             .FirstOrDefault();
 
         if (representative is null)
-            return "Candidate";
+        {
+            return string.IsNullOrWhiteSpace(fallbackJobFamilyName)
+                ? "Candidate"
+                : fallbackJobFamilyName.Trim();
+        }
 
         var role = string.Join(
             " ",
