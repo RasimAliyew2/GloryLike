@@ -29,8 +29,12 @@ public sealed class EmployerVacancyDetailDto
     public int ApplicantCount { get; set; }
     public int AverageMatchScore { get; set; }
     public int HighConfidenceCount { get; set; }
+    public int FailedApplicantCount { get; set; }
+    public int TotalApplicationCount { get; set; }
     public EmployerVacancyApplicantDto? BestMatch { get; set; }
     public List<EmployerVacancyApplicantDto> Applicants { get; set; } = new();
+    public List<EmployerVacancyApplicantDto> FailedApplicants { get; set; } =
+        new();
     public List<EmployerVacancySkillDto> Skills { get; set; } = new();
     public List<EmployerVacancyFunnelStageDto> FunnelStages { get; set; } = new();
 }
@@ -46,6 +50,18 @@ public sealed class EmployerVacancyApplicantDto
     public DateTime AppliedAtUtc { get; set; }
     public List<string> MatchedSkills { get; set; } = new();
     public List<string> MissingSkills { get; set; } = new();
+    public List<EmployerScreeningAnswerDto> ScreeningAnswers { get; set; } =
+        new();
+}
+
+public sealed class EmployerScreeningAnswerDto
+{
+    public int QuestionId { get; set; }
+    public string QuestionText { get; set; } = string.Empty;
+    public string AnswerType { get; set; } = string.Empty;
+    public string RequirementType { get; set; } = string.Empty;
+    public string Answer { get; set; } = string.Empty;
+    public bool? IsCorrect { get; set; }
 }
 
 public sealed class EmployerVacancySkillDto

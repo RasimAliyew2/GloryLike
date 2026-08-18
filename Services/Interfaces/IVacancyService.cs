@@ -31,6 +31,7 @@ public interface IVacancyService
     Task<ApplyToVacancyResult> ApplyToVacancyAsync(
         int vacancyId,
         int candidateUserId,
+        IReadOnlyCollection<CandidateScreeningAnswerRequest> answers,
         CancellationToken cancellationToken = default);
 
     Task<CreateVacancyResult> CreateAsync(

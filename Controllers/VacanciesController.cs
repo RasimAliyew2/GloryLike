@@ -78,6 +78,7 @@ public sealed class VacanciesController : ControllerBase
         var result = await _vacancyService.ApplyToVacancyAsync(
             vacancyId,
             request.CandidateUserId,
+            request.Answers ?? new List<CandidateScreeningAnswerRequest>(),
             cancellationToken);
 
         var response = new ApplyToVacancyResponse

@@ -68,6 +68,10 @@ public class AppDbContext : DbContext
         set;
     }
 
+    public DbSet<VacancyScreeningChoice> VacancyScreeningChoices { get; set; }
+
+    public DbSet<VacancyScreeningAnswer> VacancyScreeningAnswers { get; set; }
+
     public DbSet<VacancyFunnelStage> VacancyFunnelStages { get; set; }
 
     public DbSet<VacancyPublicationChannel> VacancyPublicationChannels
@@ -820,6 +824,57 @@ public class AppDbContext : DbContext
             entity.HasOne(item => item.Vacancy)
                 .WithMany(item => item.ScreeningQuestions)
                 .HasForeignKey(item => item.VacancyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<VacancyScreeningChoice>(entity =>
+        {
+            entity.ToTable("VacancyScreeningChoices");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.ChoiceText)
+                .HasMaxLength(300)
+                .IsRequired();
+            entity.HasIndex(item => new
+                {
+                    item.ScreeningQuestionId,
+                    item.SortOrder
+                })
+                .HasDatabaseName("IX_VacancyScreeningChoices_QuestionId");
+            entity.HasOne(item => item.ScreeningQuestion)
+                .WithMany(item => item.Choices)
+                .HasForeignKey(item => item.ScreeningQuestionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<VacancyScreeningAnswer>(entity =>
+        {
+            entity.ToTable("VacancyScreeningAnswers");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.QuestionText)
+                .HasMaxLength(500)
+                .IsRequired();
+            entity.Property(item => item.AnswerType)
+                .HasMaxLength(20)
+                .IsRequired();
+            entity.Property(item => item.RequirementType)
+                .HasMaxLength(20)
+                .IsRequired();
+            entity.Property(item => item.AnswerValueJson)
+                .HasMaxLength(4000)
+                .IsRequired();
+            entity.Property(item => item.AnswerDisplayText)
+                .HasMaxLength(4000)
+                .IsRequired();
+            entity.HasIndex(item => new
+                {
+                    item.VacancyApplicationId,
+                    item.ScreeningQuestionId
+                })
+                .IsUnique()
+                .HasDatabaseName("UX_VacancyScreeningAnswers_ApplicationId_QuestionId");
+            entity.HasOne(item => item.VacancyApplication)
+                .WithMany(item => item.ScreeningAnswers)
+                .HasForeignKey(item => item.VacancyApplicationId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

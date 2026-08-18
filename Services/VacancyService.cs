@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Globalization;
 using GloryLikeBackend.Data;
 using GloryLikeBackend.Dtos.Vacancies;
 using GloryLikeBackend.Models;
@@ -16,6 +17,7 @@ public sealed class VacancyService : IVacancyService
     private const int MaximumBenefitCount = 50;
     private const int MaximumCustomFieldCount = 20;
     private const int MaximumScreeningQuestionCount = 20;
+    private const int MaximumChoiceCountPerQuestion = 100;
     private const int MaximumFunnelStageCount = 20;
 
     private static readonly HashSet<string> VisibilityValues =
@@ -39,6 +41,7 @@ public sealed class VacancyService : IVacancyService
             "Text",
             "TrueFalse",
             "OneChoice",
+            "MultipleChoice",
             "ShortAnswer",
             "Number",
             "Date"
@@ -132,6 +135,8 @@ public sealed class VacancyService : IVacancyService
         var vacancies = await _dbContext.Vacancies
             .AsNoTracking()
             .Include(vacancy => vacancy.SkillRequirements)
+            .Include(vacancy => vacancy.ScreeningQuestions)
+                .ThenInclude(question => question.Choices)
             .Include(vacancy => vacancy.Applications
                 .Where(application =>
                     application.CandidateUserId == candidateUserId))
@@ -194,6 +199,26 @@ public sealed class VacancyService : IVacancyService
                     templateSkills,
                     candidateScoreMap),
                 Skills = templateSkills,
+                ScreeningQuestions = vacancy.ScreeningQuestions
+                    .OrderBy(question => question.SortOrder)
+                    .Select(question => new CandidateScreeningQuestionDto
+                    {
+                        QuestionId = question.Id,
+                        QuestionText = question.QuestionText,
+                        AnswerType = question.AnswerType,
+                        RequirementType = question.RequirementType,
+                        SortOrder = question.SortOrder,
+                        Choices = question.Choices
+                            .OrderBy(choice => choice.SortOrder)
+                            .Select(choice => new CandidateScreeningChoiceDto
+                            {
+                                ChoiceId = choice.Id,
+                                ChoiceText = choice.ChoiceText,
+                                SortOrder = choice.SortOrder
+                            })
+                            .ToList()
+                    })
+                    .ToList(),
                 HasApplied = application is not null,
                 ApplicationId = application?.Id,
                 ApplicationStatus = application?.Status ?? string.Empty,
@@ -235,7 +260,8 @@ public sealed class VacancyService : IVacancyService
                 PositionName = vacancy.PositionName,
                 Status = vacancy.Status,
 
-                CandidateCount = vacancy.Applications.Count,
+                CandidateCount = vacancy.Applications.Count(application =>
+                    application.Status != VacancyApplicationStatuses.ScreeningFailed),
                 PublishDate = vacancy.PublishDate,
                 ApplicationDeadline = vacancy.ApplicationDeadline,
                 CreatedAtUtc = vacancy.CreatedAtUtc,
@@ -266,6 +292,7 @@ public sealed class VacancyService : IVacancyService
             .Include(item => item.SkillRequirements)
             .Include(item => item.FunnelStages)
             .Include(item => item.Applications)
+                .ThenInclude(application => application.ScreeningAnswers)
             .FirstOrDefaultAsync(
                 item =>
                     item.Id == vacancyId
@@ -341,6 +368,18 @@ public sealed class VacancyService : IVacancyService
                 MissingSkills = templateSkills
                     .Where(skill => !skill.IsMatched)
                     .Select(skill => skill.SkillName)
+                    .ToList(),
+                ScreeningAnswers = application.ScreeningAnswers
+                    .OrderBy(answer => answer.Id)
+                    .Select(answer => new EmployerScreeningAnswerDto
+                    {
+                        QuestionId = answer.ScreeningQuestionId,
+                        QuestionText = answer.QuestionText,
+                        AnswerType = answer.AnswerType,
+                        RequirementType = answer.RequirementType,
+                        Answer = answer.AnswerDisplayText,
+                        IsCorrect = answer.IsCorrect
+                    })
                     .ToList()
             });
         }
@@ -349,6 +388,17 @@ public sealed class VacancyService : IVacancyService
             .OrderByDescending(applicant => applicant.MatchScore)
             .ThenBy(applicant => applicant.AppliedAtUtc)
             .ThenBy(applicant => applicant.CandidateName)
+            .ToList();
+
+        var failedApplicants = applicants
+            .Where(applicant => applicant.ApplicationStatus.Equals(
+                VacancyApplicationStatuses.ScreeningFailed,
+                StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var acceptedApplicants = applicants
+            .Where(applicant => !applicant.ApplicationStatus.Equals(
+                VacancyApplicationStatuses.ScreeningFailed,
+                StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         var detail = new EmployerVacancyDetailDto
@@ -369,14 +419,17 @@ public sealed class VacancyService : IVacancyService
             ApplicationDeadline = vacancy.ApplicationDeadline,
             CreatedAtUtc = vacancy.CreatedAtUtc,
             UpdatedAtUtc = vacancy.UpdatedAtUtc,
-            ApplicantCount = applicants.Count,
-            AverageMatchScore = applicants.Count == 0
+            ApplicantCount = acceptedApplicants.Count,
+            FailedApplicantCount = failedApplicants.Count,
+            TotalApplicationCount = applicants.Count,
+            AverageMatchScore = acceptedApplicants.Count == 0
                 ? 0
-                : RoundHalfUp(applicants.Average(item => item.MatchScore)),
-            HighConfidenceCount = applicants.Count(
+                : RoundHalfUp(acceptedApplicants.Average(item => item.MatchScore)),
+            HighConfidenceCount = acceptedApplicants.Count(
                 applicant => applicant.MatchScore >= 60),
-            BestMatch = applicants.FirstOrDefault(),
-            Applicants = applicants,
+            BestMatch = acceptedApplicants.FirstOrDefault(),
+            Applicants = acceptedApplicants,
+            FailedApplicants = failedApplicants,
             Skills = vacancy.SkillRequirements
                 .OrderBy(skill => skill.SortOrder)
                 .Select(skill => new EmployerVacancySkillDto
@@ -433,6 +486,7 @@ public sealed class VacancyService : IVacancyService
             .Include(item => item.Benefits)
             .Include(item => item.ApplicationRequirements)
             .Include(item => item.ScreeningQuestions)
+                .ThenInclude(question => question.Choices)
             .Include(item => item.FunnelStages)
             .Include(item => item.PublicationChannels)
             .FirstOrDefaultAsync(
@@ -535,6 +589,7 @@ public sealed class VacancyService : IVacancyService
     public async Task<ApplyToVacancyResult> ApplyToVacancyAsync(
         int vacancyId,
         int candidateUserId,
+        IReadOnlyCollection<CandidateScreeningAnswerRequest> answers,
         CancellationToken cancellationToken = default)
     {
         if (vacancyId <= 0 || candidateUserId <= 0)
@@ -563,6 +618,8 @@ public sealed class VacancyService : IVacancyService
 
         var vacancy = await _dbContext.Vacancies
             .AsNoTracking()
+            .Include(item => item.ScreeningQuestions)
+                .ThenInclude(question => question.Choices)
             .FirstOrDefaultAsync(
                 item => item.Id == vacancyId,
                 cancellationToken);
@@ -621,14 +678,35 @@ public sealed class VacancyService : IVacancyService
             return ApplyToVacancyResult.Applied(existing, true);
 
         var now = DateTime.UtcNow;
+        var screeningAnswers = BuildScreeningAnswers(
+            vacancy.ScreeningQuestions,
+            answers ?? Array.Empty<CandidateScreeningAnswerRequest>(),
+            now,
+            out var screeningValidationMessage,
+            out var failedScreening);
+
+        if (!string.IsNullOrWhiteSpace(screeningValidationMessage))
+        {
+            return ApplyToVacancyResult.Invalid(
+                vacancyId,
+                candidateUserId,
+                screeningValidationMessage);
+        }
+
         var application = new VacancyApplication
         {
             VacancyId = vacancyId,
             CandidateUserId = candidateUserId,
-            Status = VacancyApplicationStatuses.NoResponseYet,
+            Status = failedScreening
+                ? VacancyApplicationStatuses.ScreeningFailed
+                : VacancyApplicationStatuses.ScreeningPassed,
             AppliedAtUtc = now,
-            UpdatedAtUtc = now
+            UpdatedAtUtc = now,
+            ScreeningAnswers = screeningAnswers
         };
+
+        foreach (var answer in application.ScreeningAnswers)
+            answer.VacancyApplication = application;
 
         _dbContext.VacancyApplications.Add(application);
 
@@ -660,6 +738,158 @@ public sealed class VacancyService : IVacancyService
 
             throw;
         }
+    }
+
+    private static List<VacancyScreeningAnswer> BuildScreeningAnswers(
+        IReadOnlyCollection<VacancyScreeningQuestion> questions,
+        IReadOnlyCollection<CandidateScreeningAnswerRequest> submittedAnswers,
+        DateTime createdAtUtc,
+        out string validationMessage,
+        out bool failedScreening)
+    {
+        validationMessage = string.Empty;
+        failedScreening = false;
+
+        var normalizedAnswers = submittedAnswers
+            .Where(answer => answer is not null)
+            .ToList();
+        var duplicateQuestion = normalizedAnswers
+            .GroupBy(answer => answer.QuestionId)
+            .FirstOrDefault(group => group.Count() > 1);
+
+        if (duplicateQuestion is not null)
+        {
+            validationMessage = "Eyni screening sualına bir dəfədən çox cavab göndərilə bilməz.";
+            return [];
+        }
+
+        var validQuestionIds = questions.Select(question => question.Id).ToHashSet();
+
+        if (normalizedAnswers.Any(answer => !validQuestionIds.Contains(answer.QuestionId)))
+        {
+            validationMessage = "Göndərilən screening suallarından biri bu vakansiyaya aid deyil.";
+            return [];
+        }
+
+        var answerByQuestion = normalizedAnswers.ToDictionary(
+            answer => answer.QuestionId);
+        var result = new List<VacancyScreeningAnswer>();
+
+        foreach (var question in questions.OrderBy(item => item.SortOrder))
+        {
+            if (!answerByQuestion.TryGetValue(question.Id, out var submitted))
+            {
+                validationMessage = $"“{question.QuestionText}” sualını cavablandırın.";
+                return [];
+            }
+
+            submitted.SelectedChoiceIds ??= new List<int>();
+            var answerText = submitted.AnswerText?.Trim() ?? string.Empty;
+            var selectedIds = submitted.SelectedChoiceIds
+                .Where(id => id > 0)
+                .Distinct()
+                .ToList();
+            string displayAnswer;
+            string valueJson;
+            bool? isCorrect = null;
+
+            if (question.AnswerType is "OneChoice" or "MultipleChoice")
+            {
+                var choicesById = question.Choices.ToDictionary(choice => choice.Id);
+                if (selectedIds.Count == 0
+                    || (question.AnswerType == "OneChoice" && selectedIds.Count != 1)
+                    || selectedIds.Any(id => !choicesById.ContainsKey(id)))
+                {
+                    validationMessage = $"“{question.QuestionText}” üçün düzgün seçim edin.";
+                    return [];
+                }
+
+                var correctIds = question.Choices
+                    .Where(choice => choice.IsCorrect)
+                    .Select(choice => choice.Id)
+                    .ToHashSet();
+                isCorrect = correctIds.Count == 0
+                    ? null
+                    : correctIds.SetEquals(selectedIds);
+                displayAnswer = string.Join(
+                    ", ",
+                    question.Choices
+                        .Where(choice => selectedIds.Contains(choice.Id))
+                        .OrderBy(choice => choice.SortOrder)
+                        .Select(choice => choice.ChoiceText));
+                valueJson = JsonSerializer.Serialize(selectedIds, PayloadJsonOptions);
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(answerText))
+                {
+                    validationMessage = $"“{question.QuestionText}” sualını cavablandırın.";
+                    return [];
+                }
+
+                if (answerText.Length > 4000)
+                {
+                    validationMessage = "Screening cavabı maksimum 4000 simvol ola bilər.";
+                    return [];
+                }
+
+                if (question.AnswerType == "Number"
+                    && !decimal.TryParse(
+                        answerText,
+                        NumberStyles.Number,
+                        CultureInfo.InvariantCulture,
+                        out _))
+                {
+                    validationMessage = $"“{question.QuestionText}” üçün rəqəm daxil edin.";
+                    return [];
+                }
+
+                if (question.AnswerType == "Date"
+                    && !DateTime.TryParse(
+                        answerText,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None,
+                        out _))
+                {
+                    validationMessage = $"“{question.QuestionText}” üçün tarix daxil edin.";
+                    return [];
+                }
+
+                if (question.AnswerType == "TrueFalse"
+                    && !bool.TryParse(answerText, out _))
+                {
+                    validationMessage = $"“{question.QuestionText}” üçün True və ya False seçin.";
+                    return [];
+                }
+
+                displayAnswer = question.AnswerType == "TrueFalse"
+                    ? (bool.Parse(answerText) ? "Yes" : "No")
+                    : answerText;
+                valueJson = JsonSerializer.Serialize(answerText, PayloadJsonOptions);
+            }
+
+            if (question.RequirementType.Equals(
+                    "KnockOut",
+                    StringComparison.OrdinalIgnoreCase)
+                && isCorrect == false)
+            {
+                failedScreening = true;
+            }
+
+            result.Add(new VacancyScreeningAnswer
+            {
+                ScreeningQuestionId = question.Id,
+                QuestionText = question.QuestionText,
+                AnswerType = question.AnswerType,
+                RequirementType = question.RequirementType,
+                AnswerValueJson = valueJson,
+                AnswerDisplayText = displayAnswer,
+                IsCorrect = isCorrect,
+                CreatedAtUtc = createdAtUtc
+            });
+        }
+
+        return result;
     }
 
     public async Task<CreateVacancyResult> CreateAsync(
@@ -928,6 +1158,7 @@ public sealed class VacancyService : IVacancyService
             .Include(item => item.Benefits)
             .Include(item => item.ApplicationRequirements)
             .Include(item => item.ScreeningQuestions)
+                .ThenInclude(question => question.Choices)
             .Include(item => item.FunnelStages)
             .Include(item => item.PublicationChannels)
             .FirstOrDefaultAsync(
@@ -1380,6 +1611,19 @@ public sealed class VacancyService : IVacancyService
             question.RequirementType =
                 question.RequirementType?.Trim()
                 ?? string.Empty;
+            question.Choices ??=
+                new List<CreateVacancyScreeningChoiceRequest>();
+            question.Choices = question.Choices
+                .Where(choice => choice is not null)
+                .Select(choice => new CreateVacancyScreeningChoiceRequest
+                {
+                    ChoiceText = choice.ChoiceText?.Trim() ?? string.Empty,
+                    IsCorrect = choice.IsCorrect
+                })
+                .ToList();
+
+            if (question.AnswerType is not ("OneChoice" or "MultipleChoice"))
+                question.Choices.Clear();
         }
 
         foreach (var stage in payload.FunnelStages)
@@ -1534,6 +1778,37 @@ public sealed class VacancyService : IVacancyService
 
             if (!ScreeningRequirementTypes.Contains(question.RequirementType))
                 return "Screening requirement type düzgün deyil.";
+
+            if (question.AnswerType is "OneChoice" or "MultipleChoice")
+            {
+                if (question.Choices.Count < 2)
+                    return "Choice tipli screening sualında ən azı 2 seçim olmalıdır.";
+
+                if (question.Choices.Count > MaximumChoiceCountPerQuestion)
+                    return $"Bir screening sualına maksimum {MaximumChoiceCountPerQuestion} seçim əlavə edilə bilər.";
+
+                if (question.Choices.Any(choice =>
+                    string.IsNullOrWhiteSpace(choice.ChoiceText)
+                    || choice.ChoiceText.Length > 300))
+                {
+                    return "Screening choice mətni boş ola bilməz və maksimum 300 simvol olmalıdır.";
+                }
+
+                var duplicateChoice = question.Choices
+                    .GroupBy(choice => choice.ChoiceText, StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault(group => group.Count() > 1);
+
+                if (duplicateChoice is not null)
+                    return $"“{duplicateChoice.Key}” seçimi eyni sualda təkrarlana bilməz.";
+
+                var correctCount = question.Choices.Count(choice => choice.IsCorrect);
+
+                if (question.AnswerType == "OneChoice" && correctCount != 1)
+                    return "One Choice sualında yalnız bir düzgün cavab seçilməlidir.";
+
+                if (question.AnswerType == "MultipleChoice" && correctCount == 0)
+                    return "Multiple Choice sualında ən azı bir düzgün cavab seçilməlidir.";
+            }
         }
 
         var duplicateFunnelStage = payload.FunnelStages
@@ -1730,7 +2005,15 @@ public sealed class VacancyService : IVacancyService
                 {
                     QuestionText = item.QuestionText,
                     AnswerType = item.AnswerType,
-                    RequirementType = item.RequirementType
+                    RequirementType = item.RequirementType,
+                    Choices = item.Choices
+                        .OrderBy(choice => choice.SortOrder)
+                        .Select(choice => new CreateVacancyScreeningChoiceRequest
+                        {
+                            ChoiceText = choice.ChoiceText,
+                            IsCorrect = choice.IsCorrect
+                        })
+                        .ToList()
                 })
                 .ToList(),
             MinimumMatchScore = vacancy.MinimumMatchScore,
@@ -2014,15 +2297,30 @@ public sealed class VacancyService : IVacancyService
         {
             var question = payload.ScreeningQuestions[index];
 
-            vacancy.ScreeningQuestions.Add(
-                new VacancyScreeningQuestion
+            var screeningQuestion = new VacancyScreeningQuestion
+            {
+                Vacancy = vacancy,
+                QuestionText = question.QuestionText,
+                AnswerType = question.AnswerType,
+                RequirementType = question.RequirementType,
+                SortOrder = index
+            };
+
+            for (var choiceIndex = 0;
+                 choiceIndex < question.Choices.Count;
+                 choiceIndex++)
+            {
+                var choice = question.Choices[choiceIndex];
+                screeningQuestion.Choices.Add(new VacancyScreeningChoice
                 {
-                    Vacancy = vacancy,
-                    QuestionText = question.QuestionText,
-                    AnswerType = question.AnswerType,
-                    RequirementType = question.RequirementType,
-                    SortOrder = index
+                    ScreeningQuestion = screeningQuestion,
+                    ChoiceText = choice.ChoiceText,
+                    IsCorrect = choice.IsCorrect,
+                    SortOrder = choiceIndex
                 });
+            }
+
+            vacancy.ScreeningQuestions.Add(screeningQuestion);
         }
     }
 

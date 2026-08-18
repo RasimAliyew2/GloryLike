@@ -233,12 +233,24 @@ public sealed class CreateVacancyScreeningQuestionRequest
     public string QuestionText { get; set; } = string.Empty;
 
     [Required]
-    [RegularExpression("^(Text|TrueFalse|OneChoice|ShortAnswer|Number|Date)$")]
+    [RegularExpression("^(Text|TrueFalse|OneChoice|MultipleChoice|ShortAnswer|Number|Date)$")]
     public string AnswerType { get; set; } = string.Empty;
 
     [Required]
     [RegularExpression("^(Required|KnockOut)$")]
     public string RequirementType { get; set; } = string.Empty;
+
+    public List<CreateVacancyScreeningChoiceRequest> Choices { get; set; } =
+        new();
+}
+
+public sealed class CreateVacancyScreeningChoiceRequest
+{
+    [Required]
+    [StringLength(300)]
+    public string ChoiceText { get; set; } = string.Empty;
+
+    public bool IsCorrect { get; set; }
 }
 
 public sealed class CreateVacancyFunnelStageRequest

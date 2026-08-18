@@ -896,6 +896,60 @@ namespace GloryLikeBackend.Migrations
                     b.ToTable("VacancyApplicationRequirements", (string)null);
                 });
 
+            modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.VacancyScreeningAnswer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AnswerDisplayText")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<string>("AnswerType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("AnswerValueJson")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool?>("IsCorrect")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("QuestionText")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("RequirementType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("ScreeningQuestionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("VacancyApplicationId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VacancyApplicationId", "ScreeningQuestionId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_VacancyScreeningAnswers_ApplicationId_QuestionId");
+
+                    b.ToTable("VacancyScreeningAnswers", (string)null);
+                });
+
             modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.VacancyBenefit", b =>
                 {
                     b.Property<int>("Id")
@@ -1028,6 +1082,36 @@ namespace GloryLikeBackend.Migrations
                         .HasDatabaseName("IX_VacancyScreeningQuestions_VacancyId");
 
                     b.ToTable("VacancyScreeningQuestions", (string)null);
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.VacancyScreeningChoice", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ChoiceText")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<bool>("IsCorrect")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("ScreeningQuestionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ScreeningQuestionId", "SortOrder")
+                        .HasDatabaseName("IX_VacancyScreeningChoices_QuestionId");
+
+                    b.ToTable("VacancyScreeningChoices", (string)null);
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.VacancySkillRequirement", b =>
@@ -1199,6 +1283,17 @@ namespace GloryLikeBackend.Migrations
                     b.Navigation("Vacancy");
                 });
 
+            modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.VacancyScreeningAnswer", b =>
+                {
+                    b.HasOne("GloryLikeBackend.Models.Vacancies.VacancyApplication", "VacancyApplication")
+                        .WithMany("ScreeningAnswers")
+                        .HasForeignKey("VacancyApplicationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("VacancyApplication");
+                });
+
             modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.VacancyApplication", b =>
                 {
                     b.HasOne("GloryLikeBackend.Models.User", null)
@@ -1260,6 +1355,17 @@ namespace GloryLikeBackend.Migrations
                     b.Navigation("Vacancy");
                 });
 
+            modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.VacancyScreeningChoice", b =>
+                {
+                    b.HasOne("GloryLikeBackend.Models.Vacancies.VacancyScreeningQuestion", "ScreeningQuestion")
+                        .WithMany("Choices")
+                        .HasForeignKey("ScreeningQuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ScreeningQuestion");
+                });
+
             modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.VacancySkillRequirement", b =>
                 {
                     b.HasOne("GloryLikeBackend.Models.SkillAndJob.Skill", null)
@@ -1292,6 +1398,16 @@ namespace GloryLikeBackend.Migrations
             modelBuilder.Entity("GloryLikeBackend.Models.SkillAndJob.Seniority", b =>
                 {
                     b.Navigation("PositionLinks");
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.VacancyApplication", b =>
+                {
+                    b.Navigation("ScreeningAnswers");
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.VacancyScreeningQuestion", b =>
+                {
+                    b.Navigation("Choices");
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.Vacancy", b =>

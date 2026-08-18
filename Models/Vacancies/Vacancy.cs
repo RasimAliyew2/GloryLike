@@ -73,6 +73,8 @@ public sealed class Vacancy
 public static class VacancyApplicationStatuses
 {
     public const string NoResponseYet = "NoResponseYet";
+    public const string ScreeningPassed = "ScreeningPassed";
+    public const string ScreeningFailed = "ScreeningFailed";
 }
 
 public sealed class VacancyApplication
@@ -85,6 +87,7 @@ public sealed class VacancyApplication
     public DateTime AppliedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
     public Vacancy Vacancy { get; set; } = null!;
+    public List<VacancyScreeningAnswer> ScreeningAnswers { get; set; } = new();
 }
 
 public sealed class VacancySkillRequirement
@@ -129,6 +132,32 @@ public sealed class VacancyScreeningQuestion
     public string RequirementType { get; set; } = string.Empty;
     public int SortOrder { get; set; }
     public Vacancy Vacancy { get; set; } = null!;
+    public List<VacancyScreeningChoice> Choices { get; set; } = new();
+}
+
+public sealed class VacancyScreeningChoice
+{
+    public int Id { get; set; }
+    public int ScreeningQuestionId { get; set; }
+    public string ChoiceText { get; set; } = string.Empty;
+    public bool IsCorrect { get; set; }
+    public int SortOrder { get; set; }
+    public VacancyScreeningQuestion ScreeningQuestion { get; set; } = null!;
+}
+
+public sealed class VacancyScreeningAnswer
+{
+    public int Id { get; set; }
+    public int VacancyApplicationId { get; set; }
+    public int ScreeningQuestionId { get; set; }
+    public string QuestionText { get; set; } = string.Empty;
+    public string AnswerType { get; set; } = string.Empty;
+    public string RequirementType { get; set; } = string.Empty;
+    public string AnswerValueJson { get; set; } = string.Empty;
+    public string AnswerDisplayText { get; set; } = string.Empty;
+    public bool? IsCorrect { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public VacancyApplication VacancyApplication { get; set; } = null!;
 }
 
 public sealed class VacancyFunnelStage
