@@ -53,6 +53,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ICompanyAccessService, CompanyAccessService>();
 builder.Services.AddScoped<ICompanyTeamService, CompanyTeamService>();
 builder.Services.AddScoped<ICompanyProfileService, CompanyProfileService>();
+builder.Services.AddScoped<ICompanyHiringPlanService, CompanyHiringPlanService>();
 builder.Services.AddScoped<IOrganizationReportsService, OrganizationReportsService>();
 builder.Services.Configure<SmtpOptions>(
     builder.Configuration.GetSection(

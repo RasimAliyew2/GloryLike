@@ -8,10 +8,10 @@ public sealed class SaveCompanyProfileRequest
     public int ActorUserId { get; set; }
 
     [Required]
-    [StringLength(160)]
+    [StringLength(150)]
     public string CompanyName { get; set; } = string.Empty;
 
-    [StringLength(40)]
+    [StringLength(30)]
     public string CompanyType { get; set; } = string.Empty;
 
     [StringLength(120)]
@@ -115,4 +115,5 @@ public static class CompanyProfileErrorCodes
     public const string Validation = "validation";
     public const string Forbidden = "forbidden";
     public const string NotFound = "not_found";
+    public const string Persistence = "persistence";
 }

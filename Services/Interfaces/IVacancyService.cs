@@ -28,6 +28,11 @@ public interface IVacancyService
         int vacancyId,
         CancellationToken cancellationToken = default);
 
+    Task<ToggleEmployerVacancyStatusResult> CloseEmployerStatusAsync(
+        int employerUserId,
+        int vacancyId,
+        CancellationToken cancellationToken = default);
+
     Task<ApplyToVacancyResult> ApplyToVacancyAsync(
         int vacancyId,
         int candidateUserId,
@@ -65,17 +70,26 @@ public sealed class ToggleEmployerVacancyStatusResult
         "Suspended",
         StringComparison.OrdinalIgnoreCase);
 
+    public bool IsClosed => Status.Equals(
+        "Closed",
+        StringComparison.OrdinalIgnoreCase);
+
     public static ToggleEmployerVacancyStatusResult Updated(
         Vacancy vacancy)
     {
         var isSuspended = vacancy.Status.Equals(
             "Suspended",
             StringComparison.OrdinalIgnoreCase);
+        var isClosed = vacancy.Status.Equals(
+            "Closed",
+            StringComparison.OrdinalIgnoreCase);
 
         return new ToggleEmployerVacancyStatusResult
         {
             Success = true,
-            Message = isSuspended
+            Message = isClosed
+                ? "Vacancy closed."
+                : isSuspended
                 ? "Vacancy dayandırıldı."
                 : "Vacancy yenidən aktiv edildi.",
             VacancyId = vacancy.Id,

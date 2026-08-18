@@ -1,3 +1,5 @@
+using GloryLikeBackend.Models;
+
 namespace GloryLikeBackend.Models.Vacancies;
 
 public sealed class Vacancy
@@ -9,6 +11,7 @@ public sealed class Vacancy
     public int JobFamilyId { get; set; }
     public int SeniorityId { get; set; }
     public int PositionId { get; set; }
+    public int? HiringPlanId { get; set; }
     public string JobFamilyName { get; set; } = string.Empty;
     public string SeniorityName { get; set; } = string.Empty;
     public string PositionName { get; set; } = string.Empty;
@@ -68,6 +71,8 @@ public sealed class Vacancy
 
     public List<VacancyPublicationChannel> PublicationChannels { get; set; } =
         new();
+
+    public CompanyHiringPlan? HiringPlan { get; set; }
 }
 
 public static class VacancyApplicationStatuses

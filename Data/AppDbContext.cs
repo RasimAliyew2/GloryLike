@@ -30,6 +30,8 @@ public class AppDbContext : DbContext
 
     public DbSet<CompanyProfile> CompanyProfiles { get; set; }
 
+    public DbSet<CompanyHiringPlan> CompanyHiringPlans { get; set; }
+
     public DbSet<JobFamily> JobFamilies { get; set; }
 
     public DbSet<Seniority> Seniorities { get; set; }
@@ -203,6 +205,7 @@ public class AppDbContext : DbContext
 
         ConfigureCompanyTeamInvitations(modelBuilder);
         ConfigureCompanyProfiles(modelBuilder);
+        ConfigureCompanyHiringPlans(modelBuilder);
         ConfigureJobTaxonomy(modelBuilder);
 
         modelBuilder.Entity<SkillQuestionnaire>(entity =>
@@ -597,6 +600,55 @@ public class AppDbContext : DbContext
         });
     }
 
+    private static void ConfigureCompanyHiringPlans(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CompanyHiringPlan>(entity =>
+        {
+            entity.ToTable("CompanyHiringPlans");
+            entity.HasKey(item => item.Id);
+
+            entity.Property(item => item.Priority)
+                .HasMaxLength(20)
+                .IsRequired();
+            entity.Property(item => item.EmploymentType)
+                .HasMaxLength(30)
+                .IsRequired();
+            entity.Property(item => item.Notes)
+                .HasMaxLength(1000)
+                .IsRequired();
+
+            entity.HasIndex(item => item.CompanyOwnerUserId)
+                .HasDatabaseName("IX_CompanyHiringPlans_CompanyOwnerUserId");
+            entity.HasIndex(item => item.JobFamilyId)
+                .HasDatabaseName("IX_CompanyHiringPlans_JobFamilyId");
+            entity.HasIndex(item => item.PositionId)
+                .HasDatabaseName("IX_CompanyHiringPlans_PositionId");
+            entity.HasIndex(item => item.SeniorityId)
+                .HasDatabaseName("IX_CompanyHiringPlans_SeniorityId");
+
+            entity.HasOne(item => item.CompanyOwnerUser)
+                .WithMany()
+                .HasForeignKey(item => item.CompanyOwnerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(item => item.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.JobFamily)
+                .WithMany()
+                .HasForeignKey(item => item.JobFamilyId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Position)
+                .WithMany()
+                .HasForeignKey(item => item.PositionId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Seniority)
+                .WithMany()
+                .HasForeignKey(item => item.SeniorityId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
     private static void ConfigureVacancies(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Vacancy>(entity =>
@@ -671,6 +723,8 @@ public class AppDbContext : DbContext
                 .HasDatabaseName("IX_Vacancies_CompanyOwnerUserId");
             entity.HasIndex(item => item.PositionId)
                 .HasDatabaseName("IX_Vacancies_PositionId");
+            entity.HasIndex(item => item.HiringPlanId)
+                .HasDatabaseName("IX_Vacancies_HiringPlanId");
             entity.HasIndex(item => item.CreatedAtUtc)
                 .HasDatabaseName("IX_Vacancies_CreatedAtUtc");
 
@@ -693,6 +747,10 @@ public class AppDbContext : DbContext
             entity.HasOne<Position>()
                 .WithMany()
                 .HasForeignKey(item => item.PositionId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.HiringPlan)
+                .WithMany(item => item.Vacancies)
+                .HasForeignKey(item => item.HiringPlanId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

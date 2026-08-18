@@ -14,13 +14,16 @@ public sealed class CompanyProfileService : ICompanyProfileService
 
     private readonly AppDbContext _dbContext;
     private readonly ICompanyAccessService _companyAccessService;
+    private readonly ILogger<CompanyProfileService> _logger;
 
     public CompanyProfileService(
         AppDbContext dbContext,
-        ICompanyAccessService companyAccessService)
+        ICompanyAccessService companyAccessService,
+        ILogger<CompanyProfileService> logger)
     {
         _dbContext = dbContext;
         _companyAccessService = companyAccessService;
+        _logger = logger;
     }
 
     public async Task<CompanyProfileResponse> GetAsync(
@@ -135,7 +138,27 @@ public sealed class CompanyProfileService : ICompanyProfileService
             user.UpdatedAt = now;
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception)
+        {
+            _logger.LogError(
+                exception,
+                "Company profile could not be saved for owner {CompanyOwnerUserId}.",
+                access.CompanyOwnerUserId);
+
+            var schemaMissing = exception.InnerException?.Message.Contains(
+                "Invalid object name",
+                StringComparison.OrdinalIgnoreCase) == true;
+
+            return Failed(
+                schemaMissing
+                    ? "Database schema is not updated. Run the latest Backend migrations."
+                    : "Company profile could not be saved in SQL. Check Backend logs for the database error.",
+                CompanyProfileErrorCodes.Persistence);
+        }
 
         return Successful(
             access.CompanyOwnerUserId,

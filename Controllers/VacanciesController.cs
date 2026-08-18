@@ -273,6 +273,37 @@ public sealed class VacanciesController : ControllerBase
                 : BadRequest(response);
     }
 
+    [HttpPost("{vacancyId:int}/employer-status/close")]
+    public async Task<ActionResult<ToggleEmployerVacancyStatusResponse>>
+        CloseEmployerStatus(
+            int vacancyId,
+            [FromBody] ToggleEmployerVacancyStatusRequest request,
+            CancellationToken cancellationToken)
+    {
+        var result = await _vacancyService.CloseEmployerStatusAsync(
+            request.EmployerUserId,
+            vacancyId,
+            cancellationToken);
+        var response = new ToggleEmployerVacancyStatusResponse
+        {
+            Success = result.Success,
+            Message = result.Message,
+            VacancyId = result.VacancyId,
+            EmployerUserId = result.EmployerUserId,
+            Status = result.Status,
+            IsSuspended = result.IsSuspended,
+            UpdatedAtUtc = result.UpdatedAtUtc
+        };
+
+        if (result.Success)
+            return Ok(response);
+
+        return result.FailureKind
+            == ToggleEmployerVacancyStatusFailureKind.NotFound
+                ? NotFound(response)
+                : BadRequest(response);
+    }
+
     [HttpPost]
     [ProducesResponseType(
         typeof(CreateVacancyResponse),

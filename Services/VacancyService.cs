@@ -586,6 +586,55 @@ public sealed class VacancyService : IVacancyService
         return ToggleEmployerVacancyStatusResult.Updated(vacancy);
     }
 
+    public async Task<ToggleEmployerVacancyStatusResult>
+        CloseEmployerStatusAsync(
+            int employerUserId,
+            int vacancyId,
+            CancellationToken cancellationToken = default)
+    {
+        if (employerUserId <= 0 || vacancyId <= 0)
+        {
+            return ToggleEmployerVacancyStatusResult.Invalid(
+                employerUserId,
+                vacancyId,
+                "Employer və vacancy ID düzgün olmalıdır.");
+        }
+
+        var access = await _companyAccessService.ResolveAsync(
+            employerUserId,
+            cancellationToken);
+
+        if (access is null)
+        {
+            return ToggleEmployerVacancyStatusResult.NotFound(
+                employerUserId,
+                vacancyId,
+                "Bu company-nin vacancy-lərinə giriş icazəniz yoxdur.");
+        }
+
+        var vacancy = await _dbContext.Vacancies.FirstOrDefaultAsync(
+            item => item.Id == vacancyId
+                && item.CompanyOwnerUserId == access.CompanyOwnerUserId,
+            cancellationToken);
+
+        if (vacancy is null)
+        {
+            return ToggleEmployerVacancyStatusResult.NotFound(
+                employerUserId,
+                vacancyId,
+                "Vacancy tapılmadı və ya bu employer-ə aid deyil.");
+        }
+
+        if (!vacancy.Status.Equals("Closed", StringComparison.OrdinalIgnoreCase))
+        {
+            vacancy.Status = "Closed";
+            vacancy.UpdatedAtUtc = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return ToggleEmployerVacancyStatusResult.Updated(vacancy);
+    }
+
     public async Task<ApplyToVacancyResult> ApplyToVacancyAsync(
         int vacancyId,
         int candidateUserId,
@@ -915,6 +964,37 @@ public sealed class VacancyService : IVacancyService
                 "Bu company üçün vacancy yaratmaq icazəniz yoxdur.");
         }
 
+        if (payload.HiringPlanId.HasValue)
+        {
+            var hiringPlan = await _dbContext.CompanyHiringPlans
+                .AsNoTracking()
+                .Include(item => item.Vacancies)
+                .FirstOrDefaultAsync(
+                    item => item.Id == payload.HiringPlanId.Value
+                        && item.CompanyOwnerUserId == access.CompanyOwnerUserId,
+                    cancellationToken);
+
+            if (hiringPlan is null)
+            {
+                return CreateVacancyResult.Invalid(
+                    "Hiring plan row was not found for this company.");
+            }
+
+            if (hiringPlan.JobFamilyId != payload.JobFamilyId
+                || hiringPlan.PositionId != payload.PositionId
+                || hiringPlan.SeniorityId != payload.SeniorityId)
+            {
+                return CreateVacancyResult.Invalid(
+                    "Vacancy taxonomy must match the selected hiring plan row.");
+            }
+
+            if (hiringPlan.Vacancies.Count >= hiringPlan.Headcount)
+            {
+                return CreateVacancyResult.Conflict(
+                    "All planned vacancies for this hiring plan row have already been created.");
+            }
+        }
+
         var employerExists = await _dbContext.Users
             .AsNoTracking()
             .AnyAsync(
@@ -1023,6 +1103,7 @@ public sealed class VacancyService : IVacancyService
             JobFamilyId = payload.JobFamilyId,
             SeniorityId = payload.SeniorityId,
             PositionId = payload.PositionId,
+            HiringPlanId = payload.HiringPlanId,
             JobFamilyName = jobFamily.JobName.Trim(),
             SeniorityName = seniority.Name.Trim(),
             PositionName = position.Name.Trim(),
@@ -1184,6 +1265,36 @@ public sealed class VacancyService : IVacancyService
                 request.EmployerUserId,
                 vacancyId,
                 "Platform Vacancy ID dəyişdirilə bilməz.");
+        }
+
+        if (vacancy.HiringPlanId.HasValue
+            && payload.HiringPlanId != vacancy.HiringPlanId)
+        {
+            return UpdateVacancyResult.Invalid(
+                request.EmployerUserId,
+                vacancyId,
+                "A vacancy cannot be moved away from its hiring plan row.");
+        }
+
+        if (payload.HiringPlanId.HasValue)
+        {
+            var hiringPlan = await _dbContext.CompanyHiringPlans
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    item => item.Id == payload.HiringPlanId.Value
+                        && item.CompanyOwnerUserId == access.CompanyOwnerUserId,
+                    cancellationToken);
+
+            if (hiringPlan is null
+                || hiringPlan.JobFamilyId != payload.JobFamilyId
+                || hiringPlan.PositionId != payload.PositionId
+                || hiringPlan.SeniorityId != payload.SeniorityId)
+            {
+                return UpdateVacancyResult.Invalid(
+                    request.EmployerUserId,
+                    vacancyId,
+                    "Vacancy taxonomy must match its hiring plan row.");
+            }
         }
 
         var jobFamily = await _dbContext.JobFamilies
@@ -1880,6 +1991,7 @@ public sealed class VacancyService : IVacancyService
             JobFamilyId = vacancy.JobFamilyId,
             SeniorityId = vacancy.SeniorityId,
             PositionId = vacancy.PositionId,
+            HiringPlanId = vacancy.HiringPlanId,
             RoleTitle = vacancy.RoleTitle,
             PlatformVacancyId = vacancy.PlatformVacancyId,
             ClientRequisitionCode = vacancy.ClientRequisitionCode,
@@ -2111,6 +2223,7 @@ public sealed class VacancyService : IVacancyService
         vacancy.JobFamilyId = payload.JobFamilyId;
         vacancy.SeniorityId = payload.SeniorityId;
         vacancy.PositionId = payload.PositionId;
+        vacancy.HiringPlanId = payload.HiringPlanId;
         vacancy.JobFamilyName = jobFamily.JobName.Trim();
         vacancy.SeniorityName = seniority.Name.Trim();
         vacancy.PositionName = position.Name.Trim();
