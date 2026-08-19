@@ -25,6 +25,7 @@ public sealed class SkillAndJobService : ISkillAndJobService
         var positions = await _context.Positions
             .AsNoTracking()
             .AsSplitQuery()
+            .Where(position => position.SeniorityLinks.Any())
             .Include(position => position.Skills)
             .Include(position => position.SeniorityLinks)
             .ThenInclude(link => link.Seniority)
@@ -38,6 +39,8 @@ public sealed class SkillAndJobService : ISkillAndJobService
                 group => group.ToList());
 
         return jobFamilies
+            .Where(jobFamily =>
+                positionsByJobFamily.ContainsKey(jobFamily.Id))
             .Select(jobFamily => new JobFamilyTaxonomyDto
             {
                 Id = jobFamily.Id,
@@ -62,8 +65,11 @@ public sealed class SkillAndJobService : ISkillAndJobService
             join jobFamily in _context.JobFamilies.AsNoTracking()
                 on position.JobFamilyId equals jobFamily.Id
             where skill.Id > 0
+                  && skill.IsActive
                   && skill.SkillName != null
                   && skill.SkillName != string.Empty
+                  && _context.PositionSeniorities.Any(link =>
+                      link.PositionId == position.Id)
             orderby skill.SkillName
             select new
             {
@@ -105,7 +111,16 @@ public sealed class SkillAndJobService : ISkillAndJobService
                     row.Position.Id,
                     out var seniorities)
                     ? seniorities
-                    : new List<SeniorityOptionDto>()
+                        .Where(seniority =>
+                            seniority.SortOrder
+                            >= row.Skill.MinimumSenioritySortOrder)
+                        .ToList()
+                    : new List<SeniorityOptionDto>(),
+                MinimumSenioritySortOrder =
+                    row.Skill.MinimumSenioritySortOrder,
+                IsCore = row.Skill.IsCore,
+                AssessmentType = row.Skill.AssessmentType,
+                VerificationMethod = row.Skill.VerificationMethod
             })
             .ToList();
     }
@@ -127,14 +142,9 @@ public sealed class SkillAndJobService : ISkillAndJobService
         var skills = position.Skills
             .Where(skill =>
                 skill.Id > 0
+                && skill.IsActive
                 && !string.IsNullOrWhiteSpace(skill.SkillName))
             .OrderBy(skill => skill.SkillName)
-            .Select(skill => new SkillTaxonomyDto
-            {
-                Id = skill.Id,
-                SkillName = skill.SkillName,
-                PositionId = position.Id
-            })
             .ToList();
 
         return new PositionTaxonomyDto
@@ -150,15 +160,20 @@ public sealed class SkillAndJobService : ISkillAndJobService
                     Id = link.Seniority.Id,
                     Name = link.Seniority.Name,
                     SortOrder = link.Seniority.SortOrder,
-                    // Skill entity-ləri Position-a bağlıdır. DTO-da eyni
-                    // siyahı hər seniority altında göstərilir ki, JSON sırası
-                    // JobFamily -> Position -> Seniority -> Skills olsun.
                     Skills = skills
+                        .Where(skill =>
+                            skill.MinimumSenioritySortOrder
+                            <= link.Seniority.SortOrder)
                         .Select(skill => new SkillTaxonomyDto
                         {
                             Id = skill.Id,
                             SkillName = skill.SkillName,
-                            PositionId = skill.PositionId
+                            PositionId = skill.PositionId,
+                            MinimumSenioritySortOrder =
+                                skill.MinimumSenioritySortOrder,
+                            IsCore = skill.IsCore,
+                            AssessmentType = skill.AssessmentType,
+                            VerificationMethod = skill.VerificationMethod
                         })
                         .ToList()
                 })

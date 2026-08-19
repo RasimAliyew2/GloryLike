@@ -1038,7 +1038,8 @@ public sealed class VacancyService : IVacancyService
             .FirstOrDefaultAsync(
                 item =>
                     item.Id == payload.PositionId
-                    && item.JobFamilyId == payload.JobFamilyId,
+                    && item.JobFamilyId == payload.JobFamilyId
+                    && item.SeniorityLinks.Any(),
                 cancellationToken);
 
         if (position is null)
@@ -1079,7 +1080,9 @@ public sealed class VacancyService : IVacancyService
 
         var skillsById = await _dbContext.Skills
             .AsNoTracking()
-            .Where(skill => requestedSkillIds.Contains(skill.Id))
+            .Where(skill =>
+                skill.IsActive
+                && requestedSkillIds.Contains(skill.Id))
             .ToDictionaryAsync(
                 skill => skill.Id,
                 cancellationToken);
@@ -1316,7 +1319,8 @@ public sealed class VacancyService : IVacancyService
             .FirstOrDefaultAsync(
                 item =>
                     item.Id == payload.PositionId
-                    && item.JobFamilyId == payload.JobFamilyId,
+                    && item.JobFamilyId == payload.JobFamilyId
+                    && item.SeniorityLinks.Any(),
                 cancellationToken);
 
         if (position is null)
@@ -1363,7 +1367,9 @@ public sealed class VacancyService : IVacancyService
 
         var skillsById = await _dbContext.Skills
             .AsNoTracking()
-            .Where(skill => requestedSkillIds.Contains(skill.Id))
+            .Where(skill =>
+                skill.IsActive
+                && requestedSkillIds.Contains(skill.Id))
             .ToDictionaryAsync(
                 skill => skill.Id,
                 cancellationToken);

@@ -12,63 +12,63 @@ public sealed class SaveCompanyProfileRequest
     public string CompanyName { get; set; } = string.Empty;
 
     [StringLength(30)]
-    public string CompanyType { get; set; } = string.Empty;
+    public string? CompanyType { get; set; }
 
     [StringLength(120)]
-    public string ActivityScope { get; set; } = string.Empty;
+    public string? ActivityScope { get; set; }
 
     [Range(1800, 2100)]
     public int? FoundationYear { get; set; }
 
     [StringLength(30)]
-    public string EmployeeCount { get; set; } = string.Empty;
+    public string? EmployeeCount { get; set; }
 
     [StringLength(240)]
-    public string Website { get; set; } = string.Empty;
+    public string? Website { get; set; }
 
     [StringLength(40)]
-    public string PageLanguage { get; set; } = string.Empty;
+    public string? PageLanguage { get; set; }
 
     [StringLength(240)]
-    public string CompanyVideo { get; set; } = string.Empty;
+    public string? CompanyVideo { get; set; }
 
     [StringLength(2500)]
-    public string CompanyDescription { get; set; } = string.Empty;
+    public string? CompanyDescription { get; set; }
 
     [StringLength(1600)]
-    public string CompanyCulture { get; set; } = string.Empty;
+    public string? CompanyCulture { get; set; }
 
     [StringLength(1600)]
-    public string WhyWorkWithUs { get; set; } = string.Empty;
+    public string? WhyWorkWithUs { get; set; }
 
-    public List<string> Benefits { get; set; } = [];
+    public List<string>? Benefits { get; set; }
 
     [StringLength(240)]
-    public string CompanyAddress { get; set; } = string.Empty;
+    public string? CompanyAddress { get; set; }
 
     [StringLength(100)]
-    public string CompanyCountry { get; set; } = string.Empty;
+    public string? CompanyCountry { get; set; }
 
     [StringLength(100)]
-    public string CompanyCity { get; set; } = string.Empty;
+    public string? CompanyCity { get; set; }
 
     [StringLength(240)]
-    public string LinkedInUrl { get; set; } = string.Empty;
+    public string? LinkedInUrl { get; set; }
 
     [StringLength(240)]
-    public string InstagramUrl { get; set; } = string.Empty;
+    public string? InstagramUrl { get; set; }
 
     [StringLength(240)]
-    public string FacebookUrl { get; set; } = string.Empty;
+    public string? FacebookUrl { get; set; }
 
     [StringLength(240)]
-    public string YoutubeUrl { get; set; } = string.Empty;
+    public string? YoutubeUrl { get; set; }
 
     [StringLength(240)]
-    public string TelegramUrl { get; set; } = string.Empty;
+    public string? TelegramUrl { get; set; }
 
     [StringLength(240)]
-    public string TiktokUrl { get; set; } = string.Empty;
+    public string? TiktokUrl { get; set; }
 }
 
 public sealed class CompanyProfileResponse

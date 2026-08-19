@@ -366,6 +366,28 @@ public class AppDbContext : DbContext
                 .HasMaxLength(150)
                 .IsRequired();
 
+            entity.Property(item => item.MinimumSenioritySortOrder)
+                .HasDefaultValue(1)
+                .IsRequired();
+
+            entity.Property(item => item.IsCore)
+                .HasDefaultValue(false)
+                .IsRequired();
+
+            entity.Property(item => item.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(item => item.AssessmentType)
+                .HasMaxLength(10)
+                .HasDefaultValue("TP")
+                .IsRequired();
+
+            entity.Property(item => item.VerificationMethod)
+                .HasMaxLength(120)
+                .HasDefaultValue(string.Empty)
+                .IsRequired();
+
             entity.HasIndex(item => item.PositionId)
                 .HasDatabaseName("IX_Skills_PositionId");
 

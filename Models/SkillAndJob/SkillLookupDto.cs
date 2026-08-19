@@ -12,4 +12,12 @@ public sealed class SkillLookupDto
     public string JobFamilyName { get; set; } = string.Empty;
 
     public List<SeniorityOptionDto> Seniorities { get; set; } = new();
+
+    public int MinimumSenioritySortOrder { get; set; } = 1;
+
+    public bool IsCore { get; set; }
+
+    public string AssessmentType { get; set; } = "TP";
+
+    public string VerificationMethod { get; set; } = string.Empty;
 }

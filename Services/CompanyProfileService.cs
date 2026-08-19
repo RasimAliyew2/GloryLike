@@ -199,10 +199,10 @@ public sealed class CompanyProfileService : ICompanyProfileService
         if (string.IsNullOrWhiteSpace(request.CompanyName))
             return "Company name boş ola bilməz.";
 
-        if (request.Benefits.Count > 12)
+        if ((request.Benefits?.Count ?? 0) > 12)
             return "Ən çox 12 benefit əlavə etmək olar.";
 
-        if (request.Benefits.Any(item => item.Length > 70))
+        if (request.Benefits?.Any(item => item.Length > 70) == true)
             return "Benefit adı 70 simvoldan uzun ola bilməz.";
 
         var urls = new[]
@@ -234,28 +234,28 @@ public sealed class CompanyProfileService : ICompanyProfileService
         CompanyProfile profile)
     {
         profile.CompanyName = request.CompanyName;
-        profile.CompanyType = request.CompanyType;
-        profile.ActivityScope = request.ActivityScope;
+        profile.CompanyType = Clean(request.CompanyType);
+        profile.ActivityScope = Clean(request.ActivityScope);
         profile.FoundationYear = request.FoundationYear;
-        profile.EmployeeCount = request.EmployeeCount;
-        profile.Website = request.Website;
-        profile.PageLanguage = request.PageLanguage;
-        profile.CompanyVideo = request.CompanyVideo;
-        profile.CompanyDescription = request.CompanyDescription;
-        profile.CompanyCulture = request.CompanyCulture;
-        profile.WhyWorkWithUs = request.WhyWorkWithUs;
+        profile.EmployeeCount = Clean(request.EmployeeCount);
+        profile.Website = Clean(request.Website);
+        profile.PageLanguage = Clean(request.PageLanguage);
+        profile.CompanyVideo = Clean(request.CompanyVideo);
+        profile.CompanyDescription = Clean(request.CompanyDescription);
+        profile.CompanyCulture = Clean(request.CompanyCulture);
+        profile.WhyWorkWithUs = Clean(request.WhyWorkWithUs);
         profile.BenefitsJson = JsonSerializer.Serialize(
-            request.Benefits,
+            request.Benefits ?? [],
             JsonOptions);
-        profile.CompanyAddress = request.CompanyAddress;
-        profile.CompanyCountry = request.CompanyCountry;
-        profile.CompanyCity = request.CompanyCity;
-        profile.LinkedInUrl = request.LinkedInUrl;
-        profile.InstagramUrl = request.InstagramUrl;
-        profile.FacebookUrl = request.FacebookUrl;
-        profile.YoutubeUrl = request.YoutubeUrl;
-        profile.TelegramUrl = request.TelegramUrl;
-        profile.TiktokUrl = request.TiktokUrl;
+        profile.CompanyAddress = Clean(request.CompanyAddress);
+        profile.CompanyCountry = Clean(request.CompanyCountry);
+        profile.CompanyCity = Clean(request.CompanyCity);
+        profile.LinkedInUrl = Clean(request.LinkedInUrl);
+        profile.InstagramUrl = Clean(request.InstagramUrl);
+        profile.FacebookUrl = Clean(request.FacebookUrl);
+        profile.YoutubeUrl = Clean(request.YoutubeUrl);
+        profile.TelegramUrl = Clean(request.TelegramUrl);
+        profile.TiktokUrl = Clean(request.TiktokUrl);
     }
 
     private static CompanyProfileDto ToDto(CompanyProfile profile)
@@ -335,7 +335,7 @@ public sealed class CompanyProfileService : ICompanyProfileService
 
     private static string Clean(string? value) => value?.Trim() ?? string.Empty;
 
-    private static string? EmptyToNull(string value) =>
+    private static string? EmptyToNull(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value;
 
     private static string BuildDisplayName(User owner)
