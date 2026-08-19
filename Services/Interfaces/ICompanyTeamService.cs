@@ -17,6 +17,11 @@ public interface ICompanyTeamService
         int actorUserId,
         CancellationToken cancellationToken = default);
 
+    Task<CompanyTeamResponse> UpdateMemberRoleAsync(
+        Guid invitationId,
+        UpdateCompanyTeamMemberRoleRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<ResolveCompanyTeamInvitationResponse> ResolveInvitationAsync(
         string token,
         CancellationToken cancellationToken = default);

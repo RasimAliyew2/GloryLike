@@ -30,6 +30,8 @@ public class AppDbContext : DbContext
 
     public DbSet<CompanyProfile> CompanyProfiles { get; set; }
 
+    public DbSet<CompanyLocation> CompanyLocations { get; set; }
+
     public DbSet<CompanyHiringPlan> CompanyHiringPlans { get; set; }
 
     public DbSet<JobFamily> JobFamilies { get; set; }
@@ -205,6 +207,7 @@ public class AppDbContext : DbContext
 
         ConfigureCompanyTeamInvitations(modelBuilder);
         ConfigureCompanyProfiles(modelBuilder);
+        ConfigureCompanyLocations(modelBuilder);
         ConfigureCompanyHiringPlans(modelBuilder);
         ConfigureJobTaxonomy(modelBuilder);
 
@@ -579,6 +582,8 @@ public class AppDbContext : DbContext
                 .IsRequired();
             entity.Property(item => item.BenefitsJson)
                 .IsRequired();
+            entity.Property(item => item.LogoDataUrl)
+                .IsRequired();
             entity.Property(item => item.CompanyAddress)
                 .HasMaxLength(240)
                 .IsRequired();
@@ -619,6 +624,36 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(item => item.UpdatedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigureCompanyLocations(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CompanyLocation>(entity =>
+        {
+            entity.ToTable("CompanyLocations");
+            entity.HasKey(item => item.Id);
+
+            entity.Property(item => item.Name)
+                .HasMaxLength(120)
+                .IsRequired();
+            entity.Property(item => item.Address)
+                .HasMaxLength(240)
+                .IsRequired();
+            entity.Property(item => item.Country)
+                .HasMaxLength(100)
+                .IsRequired();
+            entity.Property(item => item.City)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.HasIndex(item => item.CompanyProfileId)
+                .HasDatabaseName("IX_CompanyLocations_CompanyProfileId");
+
+            entity.HasOne(item => item.CompanyProfile)
+                .WithMany(item => item.Locations)
+                .HasForeignKey(item => item.CompanyProfileId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 
@@ -693,6 +728,9 @@ public class AppDbContext : DbContext
             entity.Property(item => item.RoleTitle)
                 .HasMaxLength(200)
                 .IsRequired();
+            entity.Property(item => item.LocationName)
+                .HasMaxLength(460)
+                .IsRequired();
             entity.Property(item => item.ClientRequisitionCode)
                 .HasMaxLength(100)
                 .IsRequired();
@@ -747,6 +785,8 @@ public class AppDbContext : DbContext
                 .HasDatabaseName("IX_Vacancies_PositionId");
             entity.HasIndex(item => item.HiringPlanId)
                 .HasDatabaseName("IX_Vacancies_HiringPlanId");
+            entity.HasIndex(item => item.CompanyLocationId)
+                .HasDatabaseName("IX_Vacancies_CompanyLocationId");
             entity.HasIndex(item => item.CreatedAtUtc)
                 .HasDatabaseName("IX_Vacancies_CreatedAtUtc");
 
@@ -774,6 +814,10 @@ public class AppDbContext : DbContext
                 .WithMany(item => item.Vacancies)
                 .HasForeignKey(item => item.HiringPlanId)
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.CompanyLocation)
+                .WithMany()
+                .HasForeignKey(item => item.CompanyLocationId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<VacancyApplication>(entity =>

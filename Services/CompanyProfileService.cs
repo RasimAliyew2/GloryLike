@@ -9,6 +9,10 @@ namespace GloryLikeBackend.Services;
 
 public sealed class CompanyProfileService : ICompanyProfileService
 {
+    private const int MaximumLocationCount = 20;
+    private const int MaximumLogoBytes = 350 * 1024;
+    private const int MaximumLogoDataUrlLength = 500000;
+
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
@@ -39,6 +43,8 @@ public sealed class CompanyProfileService : ICompanyProfileService
 
         var profile = await _dbContext.CompanyProfiles
             .AsNoTracking()
+            .AsSplitQuery()
+            .Include(item => item.Locations)
             .FirstOrDefaultAsync(
                 item => item.OwnerUserId == access.CompanyOwnerUserId,
                 cancellationToken);
@@ -100,6 +106,8 @@ public sealed class CompanyProfileService : ICompanyProfileService
         }
 
         var profile = await _dbContext.CompanyProfiles
+            .AsSplitQuery()
+            .Include(item => item.Locations)
             .FirstOrDefaultAsync(
                 item => item.OwnerUserId == access.CompanyOwnerUserId,
                 cancellationToken);
@@ -115,6 +123,15 @@ public sealed class CompanyProfileService : ICompanyProfileService
             };
 
             _dbContext.CompanyProfiles.Add(profile);
+        }
+
+        var locationSyncError = SynchronizeLocations(request, profile);
+
+        if (!string.IsNullOrWhiteSpace(locationSyncError))
+        {
+            return Failed(
+                locationSyncError,
+                CompanyProfileErrorCodes.Validation);
         }
 
         Apply(request, profile);
@@ -172,7 +189,7 @@ public sealed class CompanyProfileService : ICompanyProfileService
         request.CompanyType = Clean(request.CompanyType);
         request.ActivityScope = Clean(request.ActivityScope);
         request.EmployeeCount = Clean(request.EmployeeCount);
-        request.Website = Clean(request.Website);
+        request.Website = NormalizeWebsite(request.Website);
         request.PageLanguage = Clean(request.PageLanguage);
         request.CompanyVideo = Clean(request.CompanyVideo);
         request.CompanyDescription = Clean(request.CompanyDescription);
@@ -192,6 +209,20 @@ public sealed class CompanyProfileService : ICompanyProfileService
             .Where(item => !string.IsNullOrWhiteSpace(item))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+        request.LogoDataUrl = Clean(request.LogoDataUrl);
+        request.Locations = (request.Locations ?? [])
+            .Where(item => item is not null)
+            .Select(item => new CompanyLocationInput
+            {
+                Id = item.Id is > 0 ? item.Id : null,
+                Name = Clean(item.Name),
+                Address = Clean(item.Address),
+                Country = Clean(item.Country),
+                City = Clean(item.City)
+            })
+            .Where(item => HasLocationValue(item))
+            .Take(MaximumLocationCount + 1)
+            .ToList();
     }
 
     private static string Validate(SaveCompanyProfileRequest request)
@@ -204,6 +235,25 @@ public sealed class CompanyProfileService : ICompanyProfileService
 
         if (request.Benefits?.Any(item => item.Length > 70) == true)
             return "Benefit adı 70 simvoldan uzun ola bilməz.";
+
+        if (request.Website?.Length > 240)
+            return "Website 240 simvoldan uzun ola bilməz.";
+
+        if ((request.Locations?.Count ?? 0) > MaximumLocationCount)
+            return $"Ən çox {MaximumLocationCount} company location əlavə etmək olar.";
+
+        if (request.Locations?.Any(item =>
+                Clean(item.Name).Length > 120
+                || Clean(item.Address).Length > 240
+                || Clean(item.Country).Length > 100
+                || Clean(item.City).Length > 100) == true)
+        {
+            return "Location xanalarından biri icazə verilən uzunluğu keçir.";
+        }
+
+        var logoValidation = ValidateLogoDataUrl(request.LogoDataUrl);
+        if (!string.IsNullOrWhiteSpace(logoValidation))
+            return logoValidation;
 
         var urls = new[]
         {
@@ -238,7 +288,7 @@ public sealed class CompanyProfileService : ICompanyProfileService
         profile.ActivityScope = Clean(request.ActivityScope);
         profile.FoundationYear = request.FoundationYear;
         profile.EmployeeCount = Clean(request.EmployeeCount);
-        profile.Website = Clean(request.Website);
+        profile.Website = NormalizeWebsite(request.Website);
         profile.PageLanguage = Clean(request.PageLanguage);
         profile.CompanyVideo = Clean(request.CompanyVideo);
         profile.CompanyDescription = Clean(request.CompanyDescription);
@@ -247,9 +297,17 @@ public sealed class CompanyProfileService : ICompanyProfileService
         profile.BenefitsJson = JsonSerializer.Serialize(
             request.Benefits ?? [],
             JsonOptions);
-        profile.CompanyAddress = Clean(request.CompanyAddress);
-        profile.CompanyCountry = Clean(request.CompanyCountry);
-        profile.CompanyCity = Clean(request.CompanyCity);
+        profile.LogoDataUrl = Clean(request.LogoDataUrl);
+        var primaryLocation = request.Locations?.FirstOrDefault();
+        profile.CompanyAddress = primaryLocation is null
+            ? Clean(request.CompanyAddress)
+            : Clean(primaryLocation.Address);
+        profile.CompanyCountry = primaryLocation is null
+            ? Clean(request.CompanyCountry)
+            : Clean(primaryLocation.Country);
+        profile.CompanyCity = primaryLocation is null
+            ? Clean(request.CompanyCity)
+            : Clean(primaryLocation.City);
         profile.LinkedInUrl = Clean(request.LinkedInUrl);
         profile.InstagramUrl = Clean(request.InstagramUrl);
         profile.FacebookUrl = Clean(request.FacebookUrl);
@@ -287,6 +345,8 @@ public sealed class CompanyProfileService : ICompanyProfileService
             CompanyCulture = profile.CompanyCulture,
             WhyWorkWithUs = profile.WhyWorkWithUs,
             Benefits = benefits,
+            LogoDataUrl = profile.LogoDataUrl,
+            Locations = BuildLocations(profile),
             CompanyAddress = profile.CompanyAddress,
             CompanyCountry = profile.CompanyCountry,
             CompanyCity = profile.CompanyCity,
@@ -334,6 +394,167 @@ public sealed class CompanyProfileService : ICompanyProfileService
     }
 
     private static string Clean(string? value) => value?.Trim() ?? string.Empty;
+
+    private static string NormalizeWebsite(string? value)
+    {
+        var cleaned = Clean(value);
+        if (string.IsNullOrWhiteSpace(cleaned))
+            return string.Empty;
+
+        if (cleaned.StartsWith("//", StringComparison.Ordinal))
+            return $"https:{cleaned}";
+
+        return cleaned.Contains("://", StringComparison.Ordinal)
+            ? cleaned
+            : $"https://{cleaned}";
+    }
+
+    private static bool HasLocationValue(CompanyLocationInput location)
+    {
+        return !string.IsNullOrWhiteSpace(location.Name)
+            || !string.IsNullOrWhiteSpace(location.Address)
+            || !string.IsNullOrWhiteSpace(location.Country)
+            || !string.IsNullOrWhiteSpace(location.City);
+    }
+
+    private string SynchronizeLocations(
+        SaveCompanyProfileRequest request,
+        CompanyProfile profile)
+    {
+        var requestedLocations = request.Locations ?? [];
+        var existingById = profile.Locations.ToDictionary(item => item.Id);
+        var requestedIds = requestedLocations
+            .Where(item => item.Id.HasValue)
+            .Select(item => item.Id!.Value)
+            .ToHashSet();
+
+        if (requestedIds.Any(id => !existingById.ContainsKey(id)))
+            return "Seçilən location bu company profile-a aid deyil.";
+
+        foreach (var existing in profile.Locations
+                     .Where(item => !requestedIds.Contains(item.Id))
+                     .ToList())
+        {
+            _dbContext.CompanyLocations.Remove(existing);
+        }
+
+        for (var index = 0; index < requestedLocations.Count; index++)
+        {
+            var input = requestedLocations[index];
+            CompanyLocation location;
+
+            if (input.Id.HasValue)
+            {
+                location = existingById[input.Id.Value];
+            }
+            else
+            {
+                location = new CompanyLocation();
+                profile.Locations.Add(location);
+            }
+
+            location.Name = Clean(input.Name);
+            location.Address = Clean(input.Address);
+            location.Country = Clean(input.Country);
+            location.City = Clean(input.City);
+            location.SortOrder = index;
+        }
+
+        return string.Empty;
+    }
+
+    private static List<CompanyLocationDto> BuildLocations(
+        CompanyProfile profile)
+    {
+        var locations = profile.Locations
+            .OrderBy(item => item.SortOrder)
+            .ThenBy(item => item.Id)
+            .Select(item => new CompanyLocationDto
+            {
+                Id = item.Id,
+                Name = item.Name,
+                Address = item.Address,
+                Country = item.Country,
+                City = item.City,
+                SortOrder = item.SortOrder,
+                DisplayName = BuildLocationDisplayName(
+                    item.Name,
+                    item.Address,
+                    item.City,
+                    item.Country)
+            })
+            .ToList();
+
+        if (locations.Count == 0
+            && (!string.IsNullOrWhiteSpace(profile.CompanyAddress)
+                || !string.IsNullOrWhiteSpace(profile.CompanyCountry)
+                || !string.IsNullOrWhiteSpace(profile.CompanyCity)))
+        {
+            locations.Add(new CompanyLocationDto
+            {
+                Address = profile.CompanyAddress,
+                Country = profile.CompanyCountry,
+                City = profile.CompanyCity,
+                DisplayName = BuildLocationDisplayName(
+                    string.Empty,
+                    profile.CompanyAddress,
+                    profile.CompanyCity,
+                    profile.CompanyCountry)
+            });
+        }
+
+        return locations;
+    }
+
+    private static string BuildLocationDisplayName(
+        string? name,
+        string? address,
+        string? city,
+        string? country)
+    {
+        if (!string.IsNullOrWhiteSpace(name))
+            return name.Trim();
+
+        var parts = new[] { city, address, country }
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Select(item => item!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        return string.Join(", ", parts);
+    }
+
+    private static string ValidateLogoDataUrl(string? value)
+    {
+        var dataUrl = Clean(value);
+        if (string.IsNullOrWhiteSpace(dataUrl))
+            return string.Empty;
+
+        if (dataUrl.Length > MaximumLogoDataUrlLength)
+            return "Logo maksimum 350 KB ola bilər.";
+
+        var supportedPrefix = dataUrl.StartsWith(
+                "data:image/jpeg;base64,",
+                StringComparison.OrdinalIgnoreCase)
+            || dataUrl.StartsWith(
+                "data:image/png;base64,",
+                StringComparison.OrdinalIgnoreCase);
+
+        var separatorIndex = dataUrl.IndexOf(',');
+        if (!supportedPrefix || separatorIndex < 0)
+            return "Logo yalnız JPG və ya PNG formatında olmalıdır.";
+
+        try
+        {
+            var bytes = Convert.FromBase64String(dataUrl[(separatorIndex + 1)..]);
+            return bytes.Length <= MaximumLogoBytes
+                ? string.Empty
+                : "Logo maksimum 350 KB ola bilər.";
+        }
+        catch (FormatException)
+        {
+            return "Logo məlumatı düzgün Base64 şəkil deyil.";
+        }
+    }
 
     private static string? EmptyToNull(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value;

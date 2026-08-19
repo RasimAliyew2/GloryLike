@@ -32,6 +32,8 @@ public sealed class CompanyProfile
 
     public string BenefitsJson { get; set; } = "[]";
 
+    public string LogoDataUrl { get; set; } = string.Empty;
+
     public string CompanyAddress { get; set; } = string.Empty;
 
     public string CompanyCountry { get; set; } = string.Empty;
@@ -55,4 +57,6 @@ public sealed class CompanyProfile
     public DateTime CreatedAtUtc { get; set; }
 
     public DateTime UpdatedAtUtc { get; set; }
+
+    public List<CompanyLocation> Locations { get; set; } = new();
 }

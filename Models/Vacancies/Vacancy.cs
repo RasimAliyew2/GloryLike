@@ -12,10 +12,12 @@ public sealed class Vacancy
     public int SeniorityId { get; set; }
     public int PositionId { get; set; }
     public int? HiringPlanId { get; set; }
+    public int? CompanyLocationId { get; set; }
     public string JobFamilyName { get; set; } = string.Empty;
     public string SeniorityName { get; set; } = string.Empty;
     public string PositionName { get; set; } = string.Empty;
     public string RoleTitle { get; set; } = string.Empty;
+    public string LocationName { get; set; } = string.Empty;
     public string ClientRequisitionCode { get; set; } = string.Empty;
     public string EmploymentType { get; set; } = string.Empty;
     public string ExperienceRequired { get; set; } = string.Empty;
@@ -73,6 +75,8 @@ public sealed class Vacancy
         new();
 
     public CompanyHiringPlan? HiringPlan { get; set; }
+
+    public CompanyLocation? CompanyLocation { get; set; }
 }
 
 public static class VacancyApplicationStatuses

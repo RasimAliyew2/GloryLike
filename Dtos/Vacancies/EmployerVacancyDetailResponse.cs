@@ -18,6 +18,8 @@ public sealed class EmployerVacancyDetailDto
     public string SeniorityName { get; set; } = string.Empty;
     public string PositionName { get; set; } = string.Empty;
     public string RoleTitle { get; set; } = string.Empty;
+    public int? CompanyLocationId { get; set; }
+    public string LocationName { get; set; } = string.Empty;
     public string EmploymentType { get; set; } = string.Empty;
     public string JobDescription { get; set; } = string.Empty;
     public string Visibility { get; set; } = string.Empty;

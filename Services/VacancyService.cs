@@ -185,6 +185,7 @@ public sealed class VacancyService : IVacancyService
                 RoleTitle = vacancy.RoleTitle,
                 PositionName = vacancy.PositionName,
                 SeniorityName = vacancy.SeniorityName,
+                LocationName = vacancy.LocationName,
                 EmploymentType = vacancy.EmploymentType,
                 MinSalary = vacancy.MinSalary,
                 MaxSalary = vacancy.MaxSalary,
@@ -258,6 +259,7 @@ public sealed class VacancyService : IVacancyService
                 RoleTitle = vacancy.RoleTitle,
                 JobFamilyName = vacancy.JobFamilyName,
                 PositionName = vacancy.PositionName,
+                LocationName = vacancy.LocationName,
                 Status = vacancy.Status,
 
                 CandidateCount = vacancy.Applications.Count(application =>
@@ -411,6 +413,8 @@ public sealed class VacancyService : IVacancyService
             SeniorityName = vacancy.SeniorityName,
             PositionName = vacancy.PositionName,
             RoleTitle = vacancy.RoleTitle,
+            CompanyLocationId = vacancy.CompanyLocationId,
+            LocationName = vacancy.LocationName,
             EmploymentType = vacancy.EmploymentType,
             JobDescription = vacancy.JobDescription,
             Visibility = vacancy.Visibility,
@@ -964,6 +968,21 @@ public sealed class VacancyService : IVacancyService
                 "Bu company üçün vacancy yaratmaq icazəniz yoxdur.");
         }
 
+        var companyLocation = await _dbContext.CompanyLocations
+            .AsNoTracking()
+            .Include(item => item.CompanyProfile)
+            .FirstOrDefaultAsync(
+                item => item.Id == payload.CompanyLocationId
+                    && item.CompanyProfile.OwnerUserId
+                        == access.CompanyOwnerUserId,
+                cancellationToken);
+
+        if (companyLocation is null)
+        {
+            return CreateVacancyResult.Invalid(
+                "Seçilən location bu company-yə aid deyil.");
+        }
+
         if (payload.HiringPlanId.HasValue)
         {
             var hiringPlan = await _dbContext.CompanyHiringPlans
@@ -1107,10 +1126,12 @@ public sealed class VacancyService : IVacancyService
             SeniorityId = payload.SeniorityId,
             PositionId = payload.PositionId,
             HiringPlanId = payload.HiringPlanId,
+            CompanyLocationId = companyLocation.Id,
             JobFamilyName = jobFamily.JobName.Trim(),
             SeniorityName = seniority.Name.Trim(),
             PositionName = position.Name.Trim(),
             RoleTitle = payload.RoleTitle,
+            LocationName = BuildLocationDisplayName(companyLocation),
             ClientRequisitionCode = payload.ClientRequisitionCode,
             EmploymentType = payload.EmploymentType,
             ExperienceRequired = payload.ExperienceRequired,
@@ -1234,6 +1255,23 @@ public sealed class VacancyService : IVacancyService
                 request.EmployerUserId,
                 vacancyId,
                 payloadValidationMessage);
+        }
+
+        var companyLocation = await _dbContext.CompanyLocations
+            .AsNoTracking()
+            .Include(item => item.CompanyProfile)
+            .FirstOrDefaultAsync(
+                item => item.Id == payload.CompanyLocationId
+                    && item.CompanyProfile.OwnerUserId
+                        == access.CompanyOwnerUserId,
+                cancellationToken);
+
+        if (companyLocation is null)
+        {
+            return UpdateVacancyResult.Invalid(
+                request.EmployerUserId,
+                vacancyId,
+                "Seçilən location bu company-yə aid deyil.");
         }
 
         var vacancy = await _dbContext.Vacancies
@@ -1390,7 +1428,8 @@ public sealed class VacancyService : IVacancyService
             payload,
             jobFamily,
             seniority,
-            position);
+            position,
+            companyLocation);
 
         ReplaceEditableCollections(
             vacancy,
@@ -1782,6 +1821,9 @@ public sealed class VacancyService : IVacancyService
 
     private static string? ValidatePayload(CreateVacancyPayload payload)
     {
+        if (payload.CompanyLocationId <= 0)
+            return "Company location seçilməlidir.";
+
         if (payload.SkillRequirements.Count == 0)
             return "Ən azı bir skill requirement göndərilməlidir.";
 
@@ -1998,6 +2040,7 @@ public sealed class VacancyService : IVacancyService
             SeniorityId = vacancy.SeniorityId,
             PositionId = vacancy.PositionId,
             HiringPlanId = vacancy.HiringPlanId,
+            CompanyLocationId = vacancy.CompanyLocationId ?? 0,
             RoleTitle = vacancy.RoleTitle,
             PlatformVacancyId = vacancy.PlatformVacancyId,
             ClientRequisitionCode = vacancy.ClientRequisitionCode,
@@ -2224,16 +2267,19 @@ public sealed class VacancyService : IVacancyService
         CreateVacancyPayload payload,
         JobFamily jobFamily,
         Seniority seniority,
-        Position position)
+        Position position,
+        CompanyLocation companyLocation)
     {
         vacancy.JobFamilyId = payload.JobFamilyId;
         vacancy.SeniorityId = payload.SeniorityId;
         vacancy.PositionId = payload.PositionId;
         vacancy.HiringPlanId = payload.HiringPlanId;
+        vacancy.CompanyLocationId = companyLocation.Id;
         vacancy.JobFamilyName = jobFamily.JobName.Trim();
         vacancy.SeniorityName = seniority.Name.Trim();
         vacancy.PositionName = position.Name.Trim();
         vacancy.RoleTitle = payload.RoleTitle;
+        vacancy.LocationName = BuildLocationDisplayName(companyLocation);
         vacancy.ClientRequisitionCode = payload.ClientRequisitionCode;
         vacancy.EmploymentType = payload.EmploymentType;
         vacancy.ExperienceRequired = payload.ExperienceRequired;
@@ -2271,6 +2317,22 @@ public sealed class VacancyService : IVacancyService
             payload,
             PayloadJsonOptions);
         vacancy.UpdatedAtUtc = DateTime.UtcNow;
+    }
+
+    private static string BuildLocationDisplayName(CompanyLocation location)
+    {
+        if (!string.IsNullOrWhiteSpace(location.Name))
+            return location.Name.Trim();
+
+        return string.Join(", ", new[]
+        {
+            location.City,
+            location.Address,
+            location.Country
+        }
+        .Where(item => !string.IsNullOrWhiteSpace(item))
+        .Select(item => item.Trim())
+        .Distinct(StringComparer.OrdinalIgnoreCase));
     }
 
     private void ReplaceEditableCollections(

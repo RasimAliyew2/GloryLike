@@ -29,6 +29,8 @@ public sealed class CompanyTeamResponse
 
     public bool CanManageTeam { get; set; }
 
+    public string ActorRole { get; set; } = string.Empty;
+
     public CompanyTeamMemberDto? Member { get; set; }
 
     public List<CompanyTeamMemberDto> Members { get; set; } = [];
@@ -53,6 +55,20 @@ public sealed class CompanyTeamMemberDto
     public DateTime? AcceptedAtUtc { get; set; }
 
     public bool IsFounder { get; set; }
+
+    public bool CanChangeRole { get; set; }
+
+    public List<string> AllowedRoles { get; set; } = [];
+}
+
+public sealed class UpdateCompanyTeamMemberRoleRequest
+{
+    [Range(1, int.MaxValue)]
+    public int ActorUserId { get; set; }
+
+    [Required]
+    [StringLength(40)]
+    public string Role { get; set; } = string.Empty;
 }
 
 public sealed class ResolveCompanyTeamInvitationResponse

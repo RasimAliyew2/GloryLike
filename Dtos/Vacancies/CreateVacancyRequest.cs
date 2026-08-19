@@ -28,6 +28,9 @@ public sealed class CreateVacancyPayload
     [Range(1, int.MaxValue)]
     public int? HiringPlanId { get; set; }
 
+    [Range(1, int.MaxValue)]
+    public int CompanyLocationId { get; set; }
+
     [Required]
     [StringLength(200)]
     public string RoleTitle { get; set; } = string.Empty;

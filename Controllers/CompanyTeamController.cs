@@ -105,6 +105,31 @@ public sealed class CompanyTeamController : ControllerBase
         };
     }
 
+    [HttpPut("invitations/{invitationId:guid}/role")]
+    public async Task<ActionResult<CompanyTeamResponse>> UpdateRole(
+        Guid invitationId,
+        [FromBody] UpdateCompanyTeamMemberRoleRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _companyTeamService.UpdateMemberRoleAsync(
+            invitationId,
+            request,
+            cancellationToken);
+
+        if (result.Success)
+            return Ok(result);
+
+        return result.ErrorCode switch
+        {
+            CompanyTeamErrorCodes.NotFound => NotFound(result),
+            CompanyTeamErrorCodes.Forbidden => StatusCode(
+                StatusCodes.Status403Forbidden,
+                result),
+            CompanyTeamErrorCodes.Conflict => Conflict(result),
+            _ => BadRequest(result)
+        };
+    }
+
     [HttpGet("invitations/resolve")]
     public async Task<ActionResult<
         ResolveCompanyTeamInvitationResponse>>

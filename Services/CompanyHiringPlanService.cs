@@ -246,7 +246,7 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
         plan.Priority = request.Priority;
         plan.TargetStartDate = request.TargetStartDate?.Date;
         plan.EmploymentType = request.EmploymentType;
-        plan.Notes = request.Notes;
+        plan.Notes = request.Notes ?? string.Empty;
         plan.UpdatedAtUtc = now;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -337,7 +337,7 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
     {
         request.Priority = request.Priority?.Trim() ?? string.Empty;
         request.EmploymentType = request.EmploymentType?.Trim() ?? string.Empty;
-        request.Notes = request.Notes?.Trim() ?? string.Empty;
+        request.Notes = request.Notes?.Trim();
     }
 
     private static string Validate(SaveCompanyHiringPlanRequest request)
@@ -359,7 +359,7 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
         if (!EmploymentTypes.Contains(request.EmploymentType))
             return "Employment type is not supported.";
 
-        if (request.Notes.Length > 1000)
+        if ((request.Notes?.Length ?? 0) > 1000)
             return "Notes can contain at most 1000 characters.";
 
         return string.Empty;

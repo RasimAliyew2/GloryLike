@@ -15,6 +15,7 @@ public sealed class EmployerVacancyListItemDto
     public string RoleTitle { get; set; } = string.Empty;
     public string JobFamilyName { get; set; } = string.Empty;
     public string PositionName { get; set; } = string.Empty;
+    public string LocationName { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public int CandidateCount { get; set; }
     public DateTime? PublishDate { get; set; }

@@ -43,6 +43,11 @@ public sealed class SaveCompanyProfileRequest
 
     public List<string>? Benefits { get; set; }
 
+    [StringLength(500000)]
+    public string? LogoDataUrl { get; set; }
+
+    public List<CompanyLocationInput>? Locations { get; set; }
+
     [StringLength(240)]
     public string? CompanyAddress { get; set; }
 
@@ -98,6 +103,8 @@ public sealed class CompanyProfileDto
     public string CompanyCulture { get; set; } = string.Empty;
     public string WhyWorkWithUs { get; set; } = string.Empty;
     public List<string> Benefits { get; set; } = [];
+    public string LogoDataUrl { get; set; } = string.Empty;
+    public List<CompanyLocationDto> Locations { get; set; } = [];
     public string CompanyAddress { get; set; } = string.Empty;
     public string CompanyCountry { get; set; } = string.Empty;
     public string CompanyCity { get; set; } = string.Empty;
@@ -108,6 +115,34 @@ public sealed class CompanyProfileDto
     public string TelegramUrl { get; set; } = string.Empty;
     public string TiktokUrl { get; set; } = string.Empty;
     public DateTime? UpdatedAtUtc { get; set; }
+}
+
+public sealed class CompanyLocationInput
+{
+    public int? Id { get; set; }
+
+    [StringLength(120)]
+    public string? Name { get; set; }
+
+    [StringLength(240)]
+    public string? Address { get; set; }
+
+    [StringLength(100)]
+    public string? Country { get; set; }
+
+    [StringLength(100)]
+    public string? City { get; set; }
+}
+
+public sealed class CompanyLocationDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Address { get; set; } = string.Empty;
+    public string Country { get; set; } = string.Empty;
+    public string City { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+    public string DisplayName { get; set; } = string.Empty;
 }
 
 public static class CompanyProfileErrorCodes

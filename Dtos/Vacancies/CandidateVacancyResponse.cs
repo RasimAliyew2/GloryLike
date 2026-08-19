@@ -21,6 +21,7 @@ public sealed class CandidateVacancyListItemDto
     public string RoleTitle { get; set; } = string.Empty;
     public string PositionName { get; set; } = string.Empty;
     public string SeniorityName { get; set; } = string.Empty;
+    public string LocationName { get; set; } = string.Empty;
     public string EmploymentType { get; set; } = string.Empty;
     public decimal? MinSalary { get; set; }
     public decimal? MaxSalary { get; set; }

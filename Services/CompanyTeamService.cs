@@ -11,6 +11,12 @@ namespace GloryLikeBackend.Services;
 
 public sealed class CompanyTeamService : ICompanyTeamService
 {
+    private static readonly string[] FounderAssignableRoles =
+        ["HR Admin", "Hiring Manager", "Recruiter"];
+
+    private static readonly string[] HrAdminAssignableRoles =
+        ["Hiring Manager", "Recruiter"];
+
     private readonly AppDbContext _dbContext;
     private readonly IRegistrationEmailSender _emailSender;
     private readonly ICompanyAccessService _companyAccessService;
@@ -77,8 +83,12 @@ public sealed class CompanyTeamService : ICompanyTeamService
             Success = true,
             CompanyName = GetCompanyName(owner),
             CanManageTeam = access.CanManageTeam,
+            ActorRole = access.Role,
             Members = new[] { ToFounderMemberDto(owner) }
-                .Concat(invitations.Select(ToMemberDto))
+                .Concat(invitations.Select(invitation => ToMemberDto(
+                    invitation,
+                    CanChangeRole(access, invitation),
+                    GetAssignableRoles(access))))
                 .ToList()
         };
     }
@@ -109,6 +119,16 @@ public sealed class CompanyTeamService : ICompanyTeamService
         {
             return Failed(
                 "Yalnız Founder və ya HR Admin team üzvü dəvət edə bilər.",
+                CompanyTeamErrorCodes.Forbidden);
+        }
+
+        if (!access.IsFounder
+            && request.Role.Equals(
+                "HR Admin",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return Failed(
+                "HR Admin yalnız Hiring Manager və Recruiter dəvət edə bilər.",
                 CompanyTeamErrorCodes.Forbidden);
         }
 
@@ -345,6 +365,16 @@ public sealed class CompanyTeamService : ICompanyTeamService
                 CompanyTeamErrorCodes.Forbidden);
         }
 
+        if (!access.IsFounder
+            && invitation.Role.Equals(
+                "HR Admin",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return Failed(
+                "HR Admin başqa HR Admin-i silə bilməz.",
+                CompanyTeamErrorCodes.Forbidden);
+        }
+
         var pendingRegistrations =
             await _dbContext.PendingEmailRegistrations
                 .Where(item =>
@@ -372,6 +402,80 @@ public sealed class CompanyTeamService : ICompanyTeamService
             Success = true,
             Message = "Team üzvü silindi.",
             CanManageTeam = true
+        };
+    }
+
+    public async Task<CompanyTeamResponse> UpdateMemberRoleAsync(
+        Guid invitationId,
+        UpdateCompanyTeamMemberRoleRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (invitationId == Guid.Empty || request.ActorUserId <= 0)
+        {
+            return Failed(
+                "Team üzvü və istifadəçi məlumatı düzgün deyil.",
+                CompanyTeamErrorCodes.Validation);
+        }
+
+        var requestedRole = NormalizeRole(request.Role);
+        if (string.IsNullOrWhiteSpace(requestedRole))
+        {
+            return Failed(
+                "Access level HR Admin, Hiring Manager və ya Recruiter olmalıdır.",
+                CompanyTeamErrorCodes.Validation);
+        }
+
+        var invitation = await _dbContext.CompanyTeamInvitations
+            .Include(item => item.AcceptedUser)
+            .Include(item => item.OwnerUser)
+            .FirstOrDefaultAsync(
+                item => item.Id == invitationId
+                    && item.Status != CompanyTeamInvitationStatuses.Removed,
+                cancellationToken);
+
+        if (invitation is null)
+            return Failed("Team üzvü tapılmadı.", CompanyTeamErrorCodes.NotFound);
+
+        var access = await _companyAccessService.ResolveAsync(
+            request.ActorUserId,
+            cancellationToken);
+
+        if (access is null
+            || !access.CanManageTeam
+            || access.CompanyOwnerUserId != invitation.OwnerUserId)
+        {
+            return Failed(
+                "Bu team üzvünün access level-ini dəyişmək icazəniz yoxdur.",
+                CompanyTeamErrorCodes.Forbidden);
+        }
+
+        if (!CanChangeRole(access, invitation)
+            || !GetAssignableRoles(access).Contains(
+                requestedRole,
+                StringComparer.OrdinalIgnoreCase))
+        {
+            return Failed(
+                access.IsFounder
+                    ? "Seçilən access level düzgün deyil."
+                    : "HR Admin başqa HR Admin-i dəyişə və ya istifadəçini HR Admin edə bilməz.",
+                CompanyTeamErrorCodes.Forbidden);
+        }
+
+        invitation.Role = requestedRole;
+        invitation.UpdatedAtUtc = UtcNow();
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new CompanyTeamResponse
+        {
+            Success = true,
+            Message = "Access level yeniləndi.",
+            CompanyName = GetCompanyName(invitation.OwnerUser),
+            CanManageTeam = true,
+            ActorRole = access.Role,
+            Member = ToMemberDto(
+                invitation,
+                CanChangeRole(access, invitation),
+                GetAssignableRoles(access))
         };
     }
 
@@ -521,7 +625,9 @@ public sealed class CompanyTeamService : ICompanyTeamService
     }
 
     private static CompanyTeamMemberDto ToMemberDto(
-        CompanyTeamInvitation invitation)
+        CompanyTeamInvitation invitation,
+        bool canChangeRole = false,
+        IReadOnlyCollection<string>? allowedRoles = null)
     {
         var activeName =
             invitation.AcceptedUser is null
@@ -548,8 +654,40 @@ public sealed class CompanyTeamService : ICompanyTeamService
             Role = invitation.Role,
             Status = invitation.Status,
             InvitedAtUtc = invitation.SentAtUtc,
-            AcceptedAtUtc = invitation.AcceptedAtUtc
+            AcceptedAtUtc = invitation.AcceptedAtUtc,
+            CanChangeRole = canChangeRole,
+            AllowedRoles = allowedRoles?.ToList() ?? []
         };
+    }
+
+    private static bool CanChangeRole(
+        CompanyAccessContext access,
+        CompanyTeamInvitation invitation)
+    {
+        if (access.IsFounder)
+            return true;
+
+        return access.Role.Equals(
+                "HR Admin",
+                StringComparison.OrdinalIgnoreCase)
+            && !invitation.Role.Equals(
+                "HR Admin",
+                StringComparison.OrdinalIgnoreCase)
+            && !invitation.Role.Equals(
+                "Admin",
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyCollection<string> GetAssignableRoles(
+        CompanyAccessContext access)
+    {
+        return access.IsFounder
+            ? FounderAssignableRoles
+            : access.Role.Equals(
+                "HR Admin",
+                StringComparison.OrdinalIgnoreCase)
+                ? HrAdminAssignableRoles
+                : [];
     }
 
     private static CompanyTeamMemberDto ToFounderMemberDto(User owner)

@@ -485,6 +485,10 @@ namespace GloryLikeBackend.Migrations
                         .HasMaxLength(240)
                         .HasColumnType("nvarchar(240)");
 
+                    b.Property<string>("LogoDataUrl")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("OwnerUserId")
                         .HasColumnType("int");
 
@@ -533,6 +537,48 @@ namespace GloryLikeBackend.Migrations
                     b.HasIndex("UpdatedByUserId");
 
                     b.ToTable("CompanyProfiles", (string)null);
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyLocation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("nvarchar(240)");
+
+                    b.Property<string>("City")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("CompanyProfileId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Country")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyProfileId")
+                        .HasDatabaseName("IX_CompanyLocations_CompanyProfileId");
+
+                    b.ToTable("CompanyLocations", (string)null);
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.PendingEmailRegistration", b =>
@@ -742,6 +788,9 @@ namespace GloryLikeBackend.Migrations
                     b.Property<int>("CompanyOwnerUserId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("CompanyLocationId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Currency")
                         .IsRequired()
                         .HasMaxLength(10)
@@ -791,6 +840,11 @@ namespace GloryLikeBackend.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("LocationName")
+                        .IsRequired()
+                        .HasMaxLength(460)
+                        .HasColumnType("nvarchar(460)");
 
                     b.Property<decimal?>("MaxSalary")
                         .HasPrecision(18, 2)
@@ -896,6 +950,9 @@ namespace GloryLikeBackend.Migrations
 
                     b.HasIndex("CompanyOwnerUserId")
                         .HasDatabaseName("IX_Vacancies_CompanyOwnerUserId");
+
+                    b.HasIndex("CompanyLocationId")
+                        .HasDatabaseName("IX_Vacancies_CompanyLocationId");
 
                     b.HasIndex("EmployerUserId")
                         .HasDatabaseName("IX_Vacancies_EmployerUserId");
@@ -1272,6 +1329,17 @@ namespace GloryLikeBackend.Migrations
                     b.Navigation("OwnerUser");
                 });
 
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyLocation", b =>
+                {
+                    b.HasOne("GloryLikeBackend.Models.CompanyProfile", "CompanyProfile")
+                        .WithMany("Locations")
+                        .HasForeignKey("CompanyProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CompanyProfile");
+                });
+
             modelBuilder.Entity("GloryLikeBackend.Models.CompanyHiringPlan", b =>
                 {
                     b.HasOne("GloryLikeBackend.Models.User", "CompanyOwnerUser")
@@ -1379,6 +1447,11 @@ namespace GloryLikeBackend.Migrations
 
             modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.Vacancy", b =>
                 {
+                    b.HasOne("GloryLikeBackend.Models.CompanyLocation", "CompanyLocation")
+                        .WithMany()
+                        .HasForeignKey("CompanyLocationId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("GloryLikeBackend.Models.CompanyHiringPlan", "HiringPlan")
                         .WithMany("Vacancies")
                         .HasForeignKey("HiringPlanId")
@@ -1413,6 +1486,8 @@ namespace GloryLikeBackend.Migrations
                         .HasForeignKey("SeniorityId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("CompanyLocation");
 
                     b.Navigation("HiringPlan");
                 });
@@ -1536,6 +1611,11 @@ namespace GloryLikeBackend.Migrations
             modelBuilder.Entity("GloryLikeBackend.Models.CompanyHiringPlan", b =>
                 {
                     b.Navigation("Vacancies");
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyProfile", b =>
+                {
+                    b.Navigation("Locations");
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.SkillAndJob.Position", b =>
