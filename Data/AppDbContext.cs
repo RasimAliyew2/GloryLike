@@ -134,6 +134,15 @@ public class AppDbContext : DbContext
             entity.Property(x => x.Industry)
                 .HasMaxLength(120);
 
+            entity.Property(x => x.BirthDate)
+                .HasColumnType("date");
+
+            entity.Property(x => x.About)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.ProfileImageDataUrl)
+                .HasColumnType("nvarchar(max)");
+
             entity.Property(x => x.PasswordResetCodeHash)
                 .HasMaxLength(500);
 

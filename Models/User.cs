@@ -30,6 +30,12 @@ public class User
 
     public int Age { get; set; }
 
+    public DateTime? BirthDate { get; set; }
+
+    public string? About { get; set; }
+
+    public string? ProfileImageDataUrl { get; set; }
+
     public string? PasswordResetCodeHash { get; set; }
 
     public DateTime? PasswordResetCodeExpiresAt { get; set; }
