@@ -153,3 +153,6 @@ C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\rjsmcshtml.dswa.cache.json
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\staticwebassets.build.json.cache
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\GloryLik.496E49EE.Up2Date
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\bin\Release\net8.0\AngleSharp.dll
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\bin\Release\net8.0\AngleSharp.Css.dll
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\bin\Release\net8.0\HtmlSanitizer.dll

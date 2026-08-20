@@ -1,9 +1,12 @@
 {
   "version": 2,
-  "dgSpecHash": "3P8YraTmr+0=",
+  "dgSpecHash": "BwwrZW4kS5c=",
   "success": true,
   "projectFilePath": "C:\\Users\\Rasim\\source\\repos\\GloryLikeBackend\\GloryLikeBackend\\GloryLikeBackend.csproj",
   "expectedPackageFiles": [
+    "C:\\Users\\Rasim\\.nuget\\packages\\anglesharp\\1.7.1\\anglesharp.1.7.1.nupkg.sha512",
+    "C:\\Users\\Rasim\\.nuget\\packages\\anglesharp.css\\1.0.1\\anglesharp.css.1.0.1.nupkg.sha512",
+    "C:\\Users\\Rasim\\.nuget\\packages\\htmlsanitizer\\9.2.995\\htmlsanitizer.9.2.995.nupkg.sha512",
     "C:\\Users\\Rasim\\.nuget\\packages\\humanizer.core\\2.14.1\\humanizer.core.2.14.1.nupkg.sha512",
     "C:\\Users\\Rasim\\.nuget\\packages\\microsoft.bcl.asyncinterfaces\\6.0.0\\microsoft.bcl.asyncinterfaces.6.0.0.nupkg.sha512",
     "C:\\Users\\Rasim\\.nuget\\packages\\microsoft.bcl.cryptography\\8.0.0\\microsoft.bcl.cryptography.8.0.0.nupkg.sha512",

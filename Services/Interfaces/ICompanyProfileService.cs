@@ -11,4 +11,8 @@ public interface ICompanyProfileService
     Task<CompanyProfileResponse> SaveAsync(
         SaveCompanyProfileRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<PublicCompanyProfileResponse> GetPublicAsync(
+        int companyOwnerUserId,
+        CancellationToken cancellationToken = default);
 }

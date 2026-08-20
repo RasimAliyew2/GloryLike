@@ -584,6 +584,14 @@ public class AppDbContext : DbContext
                 .IsRequired();
             entity.Property(item => item.LogoDataUrl)
                 .IsRequired();
+            entity.Property(item => item.CoverImageDataUrl)
+                .IsRequired();
+            entity.Property(item => item.AboutPageLayoutJson)
+                .HasMaxLength(1000)
+                .IsRequired();
+            entity.Property(item => item.AboutPageCustomHtml)
+                .HasMaxLength(60000)
+                .IsRequired();
             entity.Property(item => item.CompanyAddress)
                 .HasMaxLength(240)
                 .IsRequired();

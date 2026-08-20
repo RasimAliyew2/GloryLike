@@ -34,6 +34,14 @@ public sealed class CompanyProfile
 
     public string LogoDataUrl { get; set; } = string.Empty;
 
+    public string CoverImageDataUrl { get; set; } = string.Empty;
+
+    public string AboutPageLayoutJson { get; set; } = "[]";
+
+    public string AboutPageCustomHtml { get; set; } = string.Empty;
+
+    public bool UseCustomAboutPageHtml { get; set; }
+
     public string CompanyAddress { get; set; } = string.Empty;
 
     public string CompanyCountry { get; set; } = string.Empty;

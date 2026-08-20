@@ -9,11 +9,14 @@ namespace GloryLikeBackend.Controllers;
 public sealed class CompanyProfileController : ControllerBase
 {
     private readonly ICompanyProfileService _companyProfileService;
+    private readonly IOpenAiCompanyAboutPageDesigner _aboutPageDesigner;
 
     public CompanyProfileController(
-        ICompanyProfileService companyProfileService)
+        ICompanyProfileService companyProfileService,
+        IOpenAiCompanyAboutPageDesigner aboutPageDesigner)
     {
         _companyProfileService = companyProfileService;
+        _aboutPageDesigner = aboutPageDesigner;
     }
 
     [HttpGet]
@@ -38,6 +41,31 @@ public sealed class CompanyProfileController : ControllerBase
             cancellationToken);
 
         return ToActionResult(response);
+    }
+
+    [HttpGet("public/{companyOwnerUserId:int}")]
+    public async Task<ActionResult<PublicCompanyProfileResponse>> GetPublic(
+        int companyOwnerUserId,
+        CancellationToken cancellationToken)
+    {
+        var response = await _companyProfileService.GetPublicAsync(
+            companyOwnerUserId,
+            cancellationToken);
+
+        return response.Success ? Ok(response) : NotFound(response);
+    }
+
+    [HttpPost("about-html/ai")]
+    public async Task<ActionResult<CustomizeCompanyAboutPageResponse>>
+        CustomizeWithAi(
+            [FromBody] CustomizeCompanyAboutPageRequest request,
+            CancellationToken cancellationToken)
+    {
+        var response = await _aboutPageDesigner.CustomizeAsync(
+            request,
+            cancellationToken);
+
+        return response.Success ? Ok(response) : BadRequest(response);
     }
 
     private ActionResult<CompanyProfileResponse> ToActionResult(

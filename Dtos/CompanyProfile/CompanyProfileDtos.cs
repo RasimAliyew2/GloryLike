@@ -46,6 +46,17 @@ public sealed class SaveCompanyProfileRequest
     [StringLength(500000)]
     public string? LogoDataUrl { get; set; }
 
+    [StringLength(1100000)]
+    public string? CoverImageDataUrl { get; set; }
+
+    [StringLength(1000)]
+    public string? AboutPageLayoutJson { get; set; }
+
+    [StringLength(60000)]
+    public string? AboutPageCustomHtml { get; set; }
+
+    public bool UseCustomAboutPageHtml { get; set; }
+
     public List<CompanyLocationInput>? Locations { get; set; }
 
     [StringLength(240)]
@@ -104,6 +115,10 @@ public sealed class CompanyProfileDto
     public string WhyWorkWithUs { get; set; } = string.Empty;
     public List<string> Benefits { get; set; } = [];
     public string LogoDataUrl { get; set; } = string.Empty;
+    public string CoverImageDataUrl { get; set; } = string.Empty;
+    public string AboutPageLayoutJson { get; set; } = "[]";
+    public string AboutPageCustomHtml { get; set; } = string.Empty;
+    public bool UseCustomAboutPageHtml { get; set; }
     public List<CompanyLocationDto> Locations { get; set; } = [];
     public string CompanyAddress { get; set; } = string.Empty;
     public string CompanyCountry { get; set; } = string.Empty;
@@ -151,4 +166,54 @@ public static class CompanyProfileErrorCodes
     public const string Forbidden = "forbidden";
     public const string NotFound = "not_found";
     public const string Persistence = "persistence";
+}
+
+public sealed class PublicCompanyProfileResponse
+{
+    public bool Success { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public int CompanyOwnerUserId { get; set; }
+    public CompanyProfileDto? Profile { get; set; }
+    public List<PublicCompanyVacancyDto> Vacancies { get; set; } = [];
+}
+
+public sealed class PublicCompanyVacancyDto
+{
+    public int Id { get; set; }
+    public string PlatformVacancyId { get; set; } = string.Empty;
+    public string RoleTitle { get; set; } = string.Empty;
+    public string PositionName { get; set; } = string.Empty;
+    public string JobFamilyName { get; set; } = string.Empty;
+    public string SeniorityName { get; set; } = string.Empty;
+    public string LocationName { get; set; } = string.Empty;
+    public string EmploymentType { get; set; } = string.Empty;
+    public string JobDescription { get; set; } = string.Empty;
+    public decimal? MinSalary { get; set; }
+    public decimal? MaxSalary { get; set; }
+    public string Currency { get; set; } = string.Empty;
+    public bool HideSalary { get; set; }
+    public DateTime? ApplicationDeadline { get; set; }
+    public DateTime? PublishDate { get; set; }
+}
+
+public sealed class CustomizeCompanyAboutPageRequest
+{
+    [Range(1, int.MaxValue)]
+    public int ActorUserId { get; set; }
+
+    [Required]
+    [StringLength(1500, MinimumLength = 3)]
+    public string Prompt { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(60000)]
+    public string CurrentHtml { get; set; } = string.Empty;
+}
+
+public sealed class CustomizeCompanyAboutPageResponse
+{
+    public bool Success { get; set; }
+    public bool Allowed { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public string Html { get; set; } = string.Empty;
 }

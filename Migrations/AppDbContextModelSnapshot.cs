@@ -404,6 +404,16 @@ namespace GloryLikeBackend.Migrations
 
             modelBuilder.Entity("GloryLikeBackend.Models.CompanyProfile", b =>
                 {
+                    b.Property<string>("AboutPageCustomHtml")
+                        .IsRequired()
+                        .HasMaxLength(60000)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("AboutPageLayoutJson")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
@@ -459,6 +469,10 @@ namespace GloryLikeBackend.Migrations
                         .HasMaxLength(240)
                         .HasColumnType("nvarchar(240)");
 
+                    b.Property<string>("CoverImageDataUrl")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
@@ -512,6 +526,9 @@ namespace GloryLikeBackend.Migrations
 
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<bool>("UseCustomAboutPageHtml")
+                        .HasColumnType("bit");
 
                     b.Property<string>("Website")
                         .IsRequired()

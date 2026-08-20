@@ -12,21 +12,33 @@ public sealed class CompanyProfileService : ICompanyProfileService
     private const int MaximumLocationCount = 20;
     private const int MaximumLogoBytes = 350 * 1024;
     private const int MaximumLogoDataUrlLength = 500000;
+    private const int MaximumCoverBytes = 700 * 1024;
+    private const int MaximumCoverDataUrlLength = 1100000;
+    private const int MaximumCustomHtmlLength = 60000;
+
+    private static readonly string[] DefaultAboutPageLayout =
+    [
+        "media", "about", "culture", "benefits", "locations",
+        "vacancies", "contact"
+    ];
 
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
     private readonly AppDbContext _dbContext;
     private readonly ICompanyAccessService _companyAccessService;
+    private readonly ICompanyAboutPageHtmlSanitizer _htmlSanitizer;
     private readonly ILogger<CompanyProfileService> _logger;
 
     public CompanyProfileService(
         AppDbContext dbContext,
         ICompanyAccessService companyAccessService,
+        ICompanyAboutPageHtmlSanitizer htmlSanitizer,
         ILogger<CompanyProfileService> logger)
     {
         _dbContext = dbContext;
         _companyAccessService = companyAccessService;
+        _htmlSanitizer = htmlSanitizer;
         _logger = logger;
     }
 
@@ -183,7 +195,81 @@ public sealed class CompanyProfileService : ICompanyProfileService
             "Company profile bütün team üçün yeniləndi.");
     }
 
-    private static void Normalize(SaveCompanyProfileRequest request)
+    public async Task<PublicCompanyProfileResponse> GetPublicAsync(
+        int companyOwnerUserId,
+        CancellationToken cancellationToken = default)
+    {
+        if (companyOwnerUserId <= 0)
+        {
+            return new PublicCompanyProfileResponse
+            {
+                Success = false,
+                Message = "Company identifier düzgün deyil."
+            };
+        }
+
+        var profile = await _dbContext.CompanyProfiles
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(item => item.Locations)
+            .FirstOrDefaultAsync(
+                item => item.OwnerUserId == companyOwnerUserId,
+                cancellationToken);
+
+        if (profile is null)
+        {
+            return new PublicCompanyProfileResponse
+            {
+                Success = false,
+                Message = "Company about page tapılmadı.",
+                CompanyOwnerUserId = companyOwnerUserId
+            };
+        }
+
+        var today = DateTime.UtcNow.Date;
+        var vacancies = await _dbContext.Vacancies
+            .AsNoTracking()
+            .Where(item =>
+                item.CompanyOwnerUserId == companyOwnerUserId
+                && item.Visibility == "Public"
+                && (item.Status == "Published" || item.Status == "Active")
+                && (!item.PublishDate.HasValue
+                    || item.PublishDate.Value.Date <= today)
+                && (!item.ApplicationDeadline.HasValue
+                    || item.ApplicationDeadline.Value.Date >= today))
+            .OrderByDescending(item => item.PublicationPriority)
+            .ThenByDescending(item => item.CreatedAtUtc)
+            .Select(item => new PublicCompanyVacancyDto
+            {
+                Id = item.Id,
+                PlatformVacancyId = item.PlatformVacancyId,
+                RoleTitle = item.RoleTitle,
+                PositionName = item.PositionName,
+                JobFamilyName = item.JobFamilyName,
+                SeniorityName = item.SeniorityName,
+                LocationName = item.LocationName,
+                EmploymentType = item.EmploymentType,
+                JobDescription = item.JobDescription,
+                MinSalary = item.MinSalary,
+                MaxSalary = item.MaxSalary,
+                Currency = item.Currency,
+                HideSalary = item.HideSalary,
+                ApplicationDeadline = item.ApplicationDeadline,
+                PublishDate = item.PublishDate
+            })
+            .ToListAsync(cancellationToken);
+
+        return new PublicCompanyProfileResponse
+        {
+            Success = true,
+            Message = "Public company page yükləndi.",
+            CompanyOwnerUserId = companyOwnerUserId,
+            Profile = ToDto(profile),
+            Vacancies = vacancies
+        };
+    }
+
+    private void Normalize(SaveCompanyProfileRequest request)
     {
         request.CompanyName = Clean(request.CompanyName);
         request.CompanyType = Clean(request.CompanyType);
@@ -210,6 +296,11 @@ public sealed class CompanyProfileService : ICompanyProfileService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         request.LogoDataUrl = Clean(request.LogoDataUrl);
+        request.CoverImageDataUrl = Clean(request.CoverImageDataUrl);
+        request.AboutPageLayoutJson = NormalizeLayoutJson(
+            request.AboutPageLayoutJson);
+        request.AboutPageCustomHtml = _htmlSanitizer.Sanitize(
+            request.AboutPageCustomHtml);
         request.Locations = (request.Locations ?? [])
             .Where(item => item is not null)
             .Select(item => new CompanyLocationInput
@@ -255,6 +346,22 @@ public sealed class CompanyProfileService : ICompanyProfileService
         if (!string.IsNullOrWhiteSpace(logoValidation))
             return logoValidation;
 
+        var coverValidation = ValidateImageDataUrl(
+            request.CoverImageDataUrl,
+            MaximumCoverDataUrlLength,
+            MaximumCoverBytes,
+            "Cover image",
+            "700 KB");
+        if (!string.IsNullOrWhiteSpace(coverValidation))
+            return coverValidation;
+
+        if (request.AboutPageCustomHtml?.Length > MaximumCustomHtmlLength)
+            return "About page HTML maksimum 60,000 simvol ola bilər.";
+
+        if (request.UseCustomAboutPageHtml
+            && string.IsNullOrWhiteSpace(request.AboutPageCustomHtml))
+            return "Custom HTML aktivdirsə HTML məzmunu boş ola bilməz.";
+
         var urls = new[]
         {
             request.Website,
@@ -279,7 +386,7 @@ public sealed class CompanyProfileService : ICompanyProfileService
         return string.Empty;
     }
 
-    private static void Apply(
+    private void Apply(
         SaveCompanyProfileRequest request,
         CompanyProfile profile)
     {
@@ -298,6 +405,13 @@ public sealed class CompanyProfileService : ICompanyProfileService
             request.Benefits ?? [],
             JsonOptions);
         profile.LogoDataUrl = Clean(request.LogoDataUrl);
+        profile.CoverImageDataUrl = Clean(request.CoverImageDataUrl);
+        profile.AboutPageLayoutJson = NormalizeLayoutJson(
+            request.AboutPageLayoutJson);
+        profile.AboutPageCustomHtml = _htmlSanitizer.Sanitize(
+            request.AboutPageCustomHtml);
+        profile.UseCustomAboutPageHtml = request.UseCustomAboutPageHtml
+            && !string.IsNullOrWhiteSpace(profile.AboutPageCustomHtml);
         var primaryLocation = request.Locations?.FirstOrDefault();
         profile.CompanyAddress = primaryLocation is null
             ? Clean(request.CompanyAddress)
@@ -316,7 +430,7 @@ public sealed class CompanyProfileService : ICompanyProfileService
         profile.TiktokUrl = Clean(request.TiktokUrl);
     }
 
-    private static CompanyProfileDto ToDto(CompanyProfile profile)
+    private CompanyProfileDto ToDto(CompanyProfile profile)
     {
         List<string> benefits;
 
@@ -346,6 +460,12 @@ public sealed class CompanyProfileService : ICompanyProfileService
             WhyWorkWithUs = profile.WhyWorkWithUs,
             Benefits = benefits,
             LogoDataUrl = profile.LogoDataUrl,
+            CoverImageDataUrl = profile.CoverImageDataUrl,
+            AboutPageLayoutJson = NormalizeLayoutJson(
+                profile.AboutPageLayoutJson),
+            AboutPageCustomHtml = _htmlSanitizer.Sanitize(
+                profile.AboutPageCustomHtml),
+            UseCustomAboutPageHtml = profile.UseCustomAboutPageHtml,
             Locations = BuildLocations(profile),
             CompanyAddress = profile.CompanyAddress,
             CompanyCountry = profile.CompanyCountry,
@@ -525,12 +645,27 @@ public sealed class CompanyProfileService : ICompanyProfileService
 
     private static string ValidateLogoDataUrl(string? value)
     {
+        return ValidateImageDataUrl(
+            value,
+            MaximumLogoDataUrlLength,
+            MaximumLogoBytes,
+            "Logo",
+            "350 KB");
+    }
+
+    private static string ValidateImageDataUrl(
+        string? value,
+        int maximumDataUrlLength,
+        int maximumBytes,
+        string label,
+        string displayLimit)
+    {
         var dataUrl = Clean(value);
         if (string.IsNullOrWhiteSpace(dataUrl))
             return string.Empty;
 
-        if (dataUrl.Length > MaximumLogoDataUrlLength)
-            return "Logo maksimum 350 KB ola bilər.";
+        if (dataUrl.Length > maximumDataUrlLength)
+            return $"{label} maksimum {displayLimit} ola bilər.";
 
         var supportedPrefix = dataUrl.StartsWith(
                 "data:image/jpeg;base64,",
@@ -538,22 +673,51 @@ public sealed class CompanyProfileService : ICompanyProfileService
             || dataUrl.StartsWith(
                 "data:image/png;base64,",
                 StringComparison.OrdinalIgnoreCase);
-
         var separatorIndex = dataUrl.IndexOf(',');
+
         if (!supportedPrefix || separatorIndex < 0)
-            return "Logo yalnız JPG və ya PNG formatında olmalıdır.";
+            return $"{label} yalnız JPG və ya PNG formatında olmalıdır.";
 
         try
         {
             var bytes = Convert.FromBase64String(dataUrl[(separatorIndex + 1)..]);
-            return bytes.Length <= MaximumLogoBytes
+            return bytes.Length <= maximumBytes
                 ? string.Empty
-                : "Logo maksimum 350 KB ola bilər.";
+                : $"{label} maksimum {displayLimit} ola bilər.";
         }
         catch (FormatException)
         {
-            return "Logo məlumatı düzgün Base64 şəkil deyil.";
+            return $"{label} məlumatı düzgün Base64 şəkil deyil.";
         }
+    }
+
+    private static string NormalizeLayoutJson(string? value)
+    {
+        List<string> requested;
+
+        try
+        {
+            requested = JsonSerializer.Deserialize<List<string>>(
+                Clean(value),
+                JsonOptions) ?? [];
+        }
+        catch (JsonException)
+        {
+            requested = [];
+        }
+
+        var allowed = DefaultAboutPageLayout.ToHashSet(
+            StringComparer.OrdinalIgnoreCase);
+        var normalized = requested
+            .Select(Clean)
+            .Where(allowed.Contains)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        normalized.AddRange(DefaultAboutPageLayout.Where(
+            item => !normalized.Contains(item, StringComparer.OrdinalIgnoreCase)));
+
+        return JsonSerializer.Serialize(normalized, JsonOptions);
     }
 
     private static string? EmptyToNull(string? value) =>

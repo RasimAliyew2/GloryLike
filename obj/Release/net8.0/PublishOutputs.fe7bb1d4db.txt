@@ -4,6 +4,9 @@ C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\PubTmp\Out\GloryLikeBackend.dll
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\PubTmp\Out\GloryLikeBackend.runtimeconfig.json
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\PubTmp\Out\GloryLikeBackend.pdb
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\PubTmp\Out\AngleSharp.dll
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\PubTmp\Out\AngleSharp.Css.dll
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\PubTmp\Out\HtmlSanitizer.dll
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\PubTmp\Out\Microsoft.Bcl.Cryptography.dll
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\PubTmp\Out\Microsoft.Data.SqlClient.dll
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Release\net8.0\PubTmp\Out\Microsoft.Data.SqlClient.Extensions.Abstractions.dll

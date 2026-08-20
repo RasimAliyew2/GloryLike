@@ -8,6 +8,7 @@
     ".NETCoreApp,Version=v8.0": {
       "GloryLikeBackend/1.0.0": {
         "dependencies": {
+          "HtmlSanitizer": "9.2.995",
           "Microsoft.Data.SqlClient": "7.0.0",
           "Microsoft.EntityFrameworkCore": "8.0.10",
           "Microsoft.EntityFrameworkCore.SqlServer": "8.0.10",
@@ -17,6 +18,37 @@
         },
         "runtime": {
           "GloryLikeBackend.dll": {}
+        }
+      },
+      "AngleSharp/1.7.1": {
+        "runtime": {
+          "lib/net8.0/AngleSharp.dll": {
+            "assemblyVersion": "1.7.1.0",
+            "fileVersion": "1.7.1.0"
+          }
+        }
+      },
+      "AngleSharp.Css/1.0.1": {
+        "dependencies": {
+          "AngleSharp": "1.7.1"
+        },
+        "runtime": {
+          "lib/net8.0/AngleSharp.Css.dll": {
+            "assemblyVersion": "1.0.1.0",
+            "fileVersion": "1.0.1.0"
+          }
+        }
+      },
+      "HtmlSanitizer/9.2.995": {
+        "dependencies": {
+          "AngleSharp": "1.7.1",
+          "AngleSharp.Css": "1.0.1"
+        },
+        "runtime": {
+          "lib/net8.0/HtmlSanitizer.dll": {
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.2.995.0"
+          }
         }
       },
       "Humanizer.Core/2.14.1": {
@@ -829,6 +861,27 @@
       "type": "project",
       "serviceable": false,
       "sha512": ""
+    },
+    "AngleSharp/1.7.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-QBblGpRB3SYD66Mls7fHyl1mWkP93n7ErWDWHc1vd9sPHhdlTkmUoY3CjgfjcWNxGF9m7xjNyztRfErXqoBKOA==",
+      "path": "anglesharp/1.7.1",
+      "hashPath": "anglesharp.1.7.1.nupkg.sha512"
+    },
+    "AngleSharp.Css/1.0.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-6S13xNHH+SUGPZd6EO1MhkuDbpEnFroUM6A8DZpLJHQnLRTvtBJb3Ydu65s618E4gWF9FSWmM5jhKk4RIfwT2A==",
+      "path": "anglesharp.css/1.0.1",
+      "hashPath": "anglesharp.css.1.0.1.nupkg.sha512"
+    },
+    "HtmlSanitizer/9.2.995": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-Yws4FratoTx4FDlvOjQTfuE49ATTVwAxNosv2CE2XqnOcmPuWWOWbLwEYP5w9uqvrGRyOgQloisKVokrgxKaXg==",
+      "path": "htmlsanitizer/9.2.995",
+      "hashPath": "htmlsanitizer.9.2.995.nupkg.sha512"
     },
     "Humanizer.Core/2.14.1": {
       "type": "package",
