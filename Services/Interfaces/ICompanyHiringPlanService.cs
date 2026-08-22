@@ -26,4 +26,9 @@ public interface ICompanyHiringPlanService
         int actorUserId,
         int planId,
         CancellationToken cancellationToken = default);
+
+    Task<CompanyHiringPlanResponse> ImportAsync(
+        int actorUserId,
+        Stream input,
+        CancellationToken cancellationToken = default);
 }

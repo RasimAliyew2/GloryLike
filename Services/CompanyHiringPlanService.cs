@@ -1,6 +1,8 @@
+using System.Globalization;
 using GloryLikeBackend.Data;
 using GloryLikeBackend.Dtos.CompanyHiringPlan;
 using GloryLikeBackend.Models;
+using GloryLikeBackend.Models.SkillAndJob;
 using GloryLikeBackend.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,6 +10,19 @@ namespace GloryLikeBackend.Services;
 
 public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
 {
+    private static readonly string[] ImportHeaders =
+    [
+        "Position Title",
+        "Department",
+        "Headcount",
+        "Seniority",
+        "Priority",
+        "Target Start Date",
+        "Employment Type",
+        "Status",
+        "Notes"
+    ];
+
     private static readonly HashSet<string> FinishedVacancyStatuses =
         new(StringComparer.OrdinalIgnoreCase)
         {
@@ -37,13 +52,16 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
 
     private readonly AppDbContext _dbContext;
     private readonly ICompanyAccessService _companyAccessService;
+    private readonly IXlsxTableService _xlsxTableService;
 
     public CompanyHiringPlanService(
         AppDbContext dbContext,
-        ICompanyAccessService companyAccessService)
+        ICompanyAccessService companyAccessService,
+        IXlsxTableService xlsxTableService)
     {
         _dbContext = dbContext;
         _companyAccessService = companyAccessService;
+        _xlsxTableService = xlsxTableService;
     }
 
     public async Task<CompanyHiringPlanResponse> GetAsync(
@@ -151,6 +169,263 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
         };
     }
 
+    public async Task<CompanyHiringPlanResponse> ImportAsync(
+        int actorUserId,
+        Stream input,
+        CancellationToken cancellationToken = default)
+    {
+        var ownerUserId = await ResolveOwnerUserIdAsync(
+            actorUserId,
+            cancellationToken);
+        if (!ownerUserId.HasValue)
+            return Forbidden();
+
+        IReadOnlyList<XlsxTableRow> rows;
+        try
+        {
+            rows = _xlsxTableService.ReadSheet(
+                input,
+                "HiringPlan",
+                maxRows: 5001,
+                maxColumns: ImportHeaders.Length);
+        }
+        catch (Exception exception) when (
+            exception is InvalidDataException
+            or IOException
+            or System.Xml.XmlException)
+        {
+            return Failed(
+                $"Hiring Plan Excel could not be read. {exception.Message}",
+                CompanyHiringPlanErrorCodes.Validation);
+        }
+
+        if (rows.Count == 0)
+        {
+            return Failed(
+                "Hiring Plan Excel is empty.",
+                CompanyHiringPlanErrorCodes.Validation);
+        }
+
+        var headerError = ValidateImportHeaders(rows[0]);
+        if (!string.IsNullOrWhiteSpace(headerError))
+            return Failed(headerError, CompanyHiringPlanErrorCodes.Validation);
+
+        var structure = await _dbContext.CompanyStructureDepartments
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Where(item => item.CompanyOwnerUserId == ownerUserId.Value)
+            .Include(item => item.Divisions)
+                .ThenInclude(item => item.Positions)
+            .ToListAsync(cancellationToken);
+
+        var taxonomy = await (
+            from jobFamily in _dbContext.JobFamilies.AsNoTracking()
+            join position in _dbContext.Positions.AsNoTracking()
+                on jobFamily.Id equals position.JobFamilyId
+            join link in _dbContext.PositionSeniorities.AsNoTracking()
+                on position.Id equals link.PositionId
+            join seniority in _dbContext.Seniorities.AsNoTracking()
+                on link.SeniorityId equals seniority.Id
+            select new TaxonomyImportOption(
+                jobFamily,
+                position,
+                seniority))
+            .ToListAsync(cancellationToken);
+
+        var parsedRows = new List<ParsedImportRow>();
+        foreach (var row in rows.Skip(1))
+        {
+            var values = row.Cells
+                .Take(ImportHeaders.Length)
+                .Select(NormalizeExcelCell)
+                .ToArray();
+
+            if (values.All(string.IsNullOrWhiteSpace)
+                || values[0].StartsWith("↑", StringComparison.Ordinal)
+                || values[0].Contains("Rows 2", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var positionName = values[0];
+            var departmentName = values[1];
+            if (string.IsNullOrWhiteSpace(positionName))
+            {
+                return RowError(row.RowNumber, "Position Title is required.");
+            }
+            if (string.IsNullOrWhiteSpace(departmentName))
+            {
+                return RowError(row.RowNumber, "Department is required.");
+            }
+
+            var department = structure.FirstOrDefault(item =>
+                NameEquals(item.Name, departmentName));
+            if (department is null)
+            {
+                return RowError(
+                    row.RowNumber,
+                    $"Department '{departmentName}' does not exist in your company structure.");
+            }
+
+            var structurePositionExists = department.Divisions
+                .SelectMany(item => item.Positions)
+                .Any(item => NameEquals(item.Name, positionName));
+            if (!structurePositionExists)
+            {
+                return RowError(
+                    row.RowNumber,
+                    $"Position '{positionName}' does not exist under department '{departmentName}' in your company structure.");
+            }
+
+            var taxonomyOptions = taxonomy.Where(item =>
+                    NameEquals(item.JobFamily.JobName, departmentName)
+                    && NameEquals(item.Position.Name, positionName))
+                .OrderBy(item => item.Seniority.SortOrder)
+                .ToList();
+            if (taxonomyOptions.Count == 0)
+            {
+                return RowError(
+                    row.RowNumber,
+                    $"Position '{positionName}' under department '{departmentName}' does not exist in SQL taxonomy.");
+            }
+
+            if (!int.TryParse(
+                    values[2],
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out var headcount)
+                || headcount is < 1 or > 1000)
+            {
+                return RowError(
+                    row.RowNumber,
+                    "Headcount must be a whole number between 1 and 1000.");
+            }
+
+            TaxonomyImportOption? selectedTaxonomy;
+            if (string.IsNullOrWhiteSpace(values[3]))
+            {
+                selectedTaxonomy = taxonomyOptions[0];
+            }
+            else
+            {
+                selectedTaxonomy = taxonomyOptions.FirstOrDefault(item =>
+                    NameEquals(item.Seniority.Name, values[3]));
+                if (selectedTaxonomy is null)
+                {
+                    return RowError(
+                        row.RowNumber,
+                        $"Seniority '{values[3]}' is not available for position '{positionName}'.");
+                }
+            }
+
+            var priority = string.IsNullOrWhiteSpace(values[4])
+                ? "Medium"
+                : CanonicalValue(values[4], Priorities);
+            if (string.IsNullOrWhiteSpace(priority))
+            {
+                return RowError(
+                    row.RowNumber,
+                    "Priority must be Low, Medium, High, or Critical.");
+            }
+
+            if (!TryParseExcelDate(values[5], out var targetStartDate))
+            {
+                return RowError(
+                    row.RowNumber,
+                    "Target Start Date must use YYYY-MM-DD format.");
+            }
+
+            var employmentType = string.IsNullOrWhiteSpace(values[6])
+                ? "Full-time"
+                : CanonicalValue(values[6], EmploymentTypes);
+            if (string.IsNullOrWhiteSpace(employmentType))
+            {
+                return RowError(
+                    row.RowNumber,
+                    "Employment Type must be Full-time, Part-time, Contract, Temporary, or Internship.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(values[7])
+                && !new[] { "Planned", "In Progress", "Finished", "Filled" }
+                    .Any(item => NameEquals(item, values[7])))
+            {
+                return RowError(
+                    row.RowNumber,
+                    "Status must be Planned, In Progress, Finished, or Filled.");
+            }
+
+            // Hiring Plan status is intentionally recalculated from linked vacancies.
+            // The Excel value is validated for template integrity but is not persisted.
+
+            if (values[8].Length > 1000)
+                return RowError(row.RowNumber, "Notes can contain at most 1000 characters.");
+
+            parsedRows.Add(new ParsedImportRow(
+                row.RowNumber,
+                selectedTaxonomy!,
+                headcount,
+                priority,
+                targetStartDate,
+                employmentType,
+                values[8]));
+        }
+
+        if (parsedRows.Count == 0)
+        {
+            return Failed(
+                "Hiring Plan Excel does not contain any data rows.",
+                CompanyHiringPlanErrorCodes.Validation);
+        }
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(
+            cancellationToken);
+        try
+        {
+            var now = DateTime.UtcNow;
+            var entities = parsedRows.Select(row => new CompanyHiringPlan
+            {
+                CompanyOwnerUserId = ownerUserId.Value,
+                CreatedByUserId = actorUserId,
+                JobFamilyId = row.Taxonomy.JobFamily.Id,
+                PositionId = row.Taxonomy.Position.Id,
+                SeniorityId = row.Taxonomy.Seniority.Id,
+                Headcount = row.Headcount,
+                Priority = row.Priority,
+                TargetStartDate = row.TargetStartDate,
+                EmploymentType = row.EmploymentType,
+                Notes = row.Notes,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            }).ToList();
+
+            _dbContext.CompanyHiringPlans.AddRange(entities);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            for (var index = 0; index < entities.Count; index++)
+            {
+                entities[index].JobFamily = parsedRows[index].Taxonomy.JobFamily;
+                entities[index].Position = parsedRows[index].Taxonomy.Position;
+                entities[index].Seniority = parsedRows[index].Taxonomy.Seniority;
+            }
+
+            return new CompanyHiringPlanResponse
+            {
+                Success = true,
+                Message = $"{entities.Count} hiring plan rows imported successfully.",
+                CompanyOwnerUserId = ownerUserId.Value,
+                Plans = entities.Select(ToDto).ToList()
+            };
+        }
+        catch (DbUpdateException)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Failed(
+                "No hiring plan rows were imported because SQL rejected the workbook data.",
+                CompanyHiringPlanErrorCodes.Conflict);
+        }
+    }
+
     private async Task<CompanyHiringPlanResponse> SaveAsync(
         int? planId,
         SaveCompanyHiringPlanRequest request,
@@ -191,6 +466,31 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
         {
             return Failed(
                 "The selected job, position, and seniority combination does not exist in SQL taxonomy.",
+                CompanyHiringPlanErrorCodes.Validation);
+        }
+
+        var structureDepartments = await _dbContext.CompanyStructureDepartments
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Where(item => item.CompanyOwnerUserId == ownerUserId.Value)
+            .Include(item => item.Divisions)
+                .ThenInclude(item => item.Positions)
+            .ToListAsync(cancellationToken);
+        var structureDepartment = structureDepartments.FirstOrDefault(item =>
+            NameEquals(item.Name, taxonomy.JobFamily.JobName));
+        if (structureDepartment is null)
+        {
+            return Failed(
+                $"Department '{taxonomy.JobFamily.JobName}' does not exist in your company structure.",
+                CompanyHiringPlanErrorCodes.Validation);
+        }
+
+        if (!structureDepartment.Divisions
+                .SelectMany(item => item.Positions)
+                .Any(item => NameEquals(item.Name, taxonomy.Position.Name)))
+        {
+            return Failed(
+                $"Position '{taxonomy.Position.Name}' does not exist under department '{taxonomy.JobFamily.JobName}' in your company structure.",
                 CompanyHiringPlanErrorCodes.Validation);
         }
 
@@ -340,6 +640,98 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
         request.Notes = request.Notes?.Trim();
     }
 
+    private static string ValidateImportHeaders(XlsxTableRow row)
+    {
+        for (var index = 0; index < ImportHeaders.Length; index++)
+        {
+            var actual = NormalizeHeader(index < row.Cells.Count
+                ? row.Cells[index]
+                : string.Empty);
+            if (!string.Equals(
+                    actual,
+                    NormalizeHeader(ImportHeaders[index]),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return $"Column {index + 1} must be named '{ImportHeaders[index]}'. Do not rename or reorder the columns.";
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private static CompanyHiringPlanResponse RowError(
+        int rowNumber,
+        string message)
+    {
+        return Failed(
+            $"Row {rowNumber}: {message}",
+            CompanyHiringPlanErrorCodes.Validation);
+    }
+
+    private static string CanonicalValue(
+        string value,
+        IEnumerable<string> availableValues)
+    {
+        return availableValues.FirstOrDefault(item => NameEquals(item, value))
+            ?? string.Empty;
+    }
+
+    private static bool TryParseExcelDate(
+        string value,
+        out DateTime? result)
+    {
+        result = null;
+        if (string.IsNullOrWhiteSpace(value))
+            return true;
+
+        if (DateTime.TryParseExact(
+                value,
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var exactDate))
+        {
+            result = exactDate.Date;
+            return true;
+        }
+
+        if (double.TryParse(
+                value,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var serialDate)
+            && serialDate is > 1 and < 2958466)
+        {
+            try
+            {
+                result = DateTime.FromOADate(serialDate).Date;
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    private static string NormalizeExcelCell(string? value) =>
+        string.Join(
+            ' ',
+            (value ?? string.Empty).Split(
+                (char[]?)null,
+                StringSplitOptions.RemoveEmptyEntries));
+
+    private static string NormalizeHeader(string value) =>
+        string.Concat(value.Where(character => !char.IsWhiteSpace(character)));
+
+    private static bool NameEquals(string left, string right) =>
+        string.Equals(
+            NormalizeExcelCell(left),
+            NormalizeExcelCell(right),
+            StringComparison.OrdinalIgnoreCase);
+
     private static string Validate(SaveCompanyHiringPlanRequest request)
     {
         if (request.ActorUserId <= 0
@@ -398,4 +790,18 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
             ErrorCode = errorCode
         };
     }
+
+    private sealed record TaxonomyImportOption(
+        JobFamily JobFamily,
+        Position Position,
+        Seniority Seniority);
+
+    private sealed record ParsedImportRow(
+        int RowNumber,
+        TaxonomyImportOption Taxonomy,
+        int Headcount,
+        string Priority,
+        DateTime? TargetStartDate,
+        string EmploymentType,
+        string Notes);
 }

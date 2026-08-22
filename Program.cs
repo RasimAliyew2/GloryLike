@@ -60,6 +60,8 @@ builder.Services.AddHttpClient<
     IOpenAiCompanyAboutPageDesigner,
     OpenAiCompanyAboutPageDesigner>();
 builder.Services.AddScoped<ICompanyHiringPlanService, CompanyHiringPlanService>();
+builder.Services.AddSingleton<IXlsxTableService, XlsxTableService>();
+builder.Services.AddScoped<ICompanyStructureService, CompanyStructureService>();
 builder.Services.AddScoped<IOrganizationReportsService, OrganizationReportsService>();
 builder.Services.Configure<SmtpOptions>(
     builder.Configuration.GetSection(

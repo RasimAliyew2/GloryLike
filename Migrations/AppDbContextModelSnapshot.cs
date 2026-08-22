@@ -598,6 +598,105 @@ namespace GloryLikeBackend.Migrations
                     b.ToTable("CompanyLocations", (string)null);
                 });
 
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyStructureDepartment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CompanyOwnerUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyOwnerUserId", "SortOrder")
+                        .HasDatabaseName("IX_CompanyStructureDepartments_Owner_SortOrder");
+
+                    b.HasIndex("CompanyOwnerUserId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("UX_CompanyStructureDepartments_Owner_Name");
+
+                    b.ToTable("CompanyStructureDepartments", (string)null);
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyStructureDivision", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DepartmentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DepartmentId", "SortOrder")
+                        .HasDatabaseName("IX_CompanyStructureDivisions_Department_SortOrder");
+
+                    b.HasIndex("DepartmentId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("UX_CompanyStructureDivisions_Department_Name");
+
+                    b.ToTable("CompanyStructureDivisions", (string)null);
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyStructurePosition", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("DivisionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DivisionId", "SortOrder")
+                        .HasDatabaseName("IX_CompanyStructurePositions_Division_SortOrder");
+
+                    b.HasIndex("DivisionId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("UX_CompanyStructurePositions_Division_Name");
+
+                    b.ToTable("CompanyStructurePositions", (string)null);
+                });
+
             modelBuilder.Entity("GloryLikeBackend.Models.PendingEmailRegistration", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1367,6 +1466,39 @@ namespace GloryLikeBackend.Migrations
                     b.Navigation("CompanyProfile");
                 });
 
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyStructureDepartment", b =>
+                {
+                    b.HasOne("GloryLikeBackend.Models.User", "CompanyOwnerUser")
+                        .WithMany()
+                        .HasForeignKey("CompanyOwnerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CompanyOwnerUser");
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyStructureDivision", b =>
+                {
+                    b.HasOne("GloryLikeBackend.Models.CompanyStructureDepartment", "Department")
+                        .WithMany("Divisions")
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Department");
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyStructurePosition", b =>
+                {
+                    b.HasOne("GloryLikeBackend.Models.CompanyStructureDivision", "Division")
+                        .WithMany("Positions")
+                        .HasForeignKey("DivisionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Division");
+                });
+
             modelBuilder.Entity("GloryLikeBackend.Models.CompanyHiringPlan", b =>
                 {
                     b.HasOne("GloryLikeBackend.Models.User", "CompanyOwnerUser")
@@ -1643,6 +1775,16 @@ namespace GloryLikeBackend.Migrations
             modelBuilder.Entity("GloryLikeBackend.Models.CompanyProfile", b =>
                 {
                     b.Navigation("Locations");
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyStructureDepartment", b =>
+                {
+                    b.Navigation("Divisions");
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyStructureDivision", b =>
+                {
+                    b.Navigation("Positions");
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.SkillAndJob.Position", b =>

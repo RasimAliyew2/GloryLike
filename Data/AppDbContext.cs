@@ -32,6 +32,24 @@ public class AppDbContext : DbContext
 
     public DbSet<CompanyLocation> CompanyLocations { get; set; }
 
+    public DbSet<CompanyStructureDepartment> CompanyStructureDepartments
+    {
+        get;
+        set;
+    }
+
+    public DbSet<CompanyStructureDivision> CompanyStructureDivisions
+    {
+        get;
+        set;
+    }
+
+    public DbSet<CompanyStructurePosition> CompanyStructurePositions
+    {
+        get;
+        set;
+    }
+
     public DbSet<CompanyHiringPlan> CompanyHiringPlans { get; set; }
 
     public DbSet<JobFamily> JobFamilies { get; set; }
@@ -217,6 +235,7 @@ public class AppDbContext : DbContext
         ConfigureCompanyTeamInvitations(modelBuilder);
         ConfigureCompanyProfiles(modelBuilder);
         ConfigureCompanyLocations(modelBuilder);
+        ConfigureCompanyStructure(modelBuilder);
         ConfigureCompanyHiringPlans(modelBuilder);
         ConfigureJobTaxonomy(modelBuilder);
 
@@ -670,6 +689,87 @@ public class AppDbContext : DbContext
             entity.HasOne(item => item.CompanyProfile)
                 .WithMany(item => item.Locations)
                 .HasForeignKey(item => item.CompanyProfileId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
+    private static void ConfigureCompanyStructure(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CompanyStructureDepartment>(entity =>
+        {
+            entity.ToTable("CompanyStructureDepartments");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name)
+                .HasMaxLength(120)
+                .IsRequired();
+            entity.HasIndex(item => new
+                {
+                    item.CompanyOwnerUserId,
+                    item.Name
+                })
+                .IsUnique()
+                .HasDatabaseName("UX_CompanyStructureDepartments_Owner_Name");
+            entity.HasIndex(item => new
+                {
+                    item.CompanyOwnerUserId,
+                    item.SortOrder
+                })
+                .HasDatabaseName("IX_CompanyStructureDepartments_Owner_SortOrder");
+            entity.HasOne(item => item.CompanyOwnerUser)
+                .WithMany()
+                .HasForeignKey(item => item.CompanyOwnerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CompanyStructureDivision>(entity =>
+        {
+            entity.ToTable("CompanyStructureDivisions");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name)
+                .HasMaxLength(120)
+                .IsRequired();
+            entity.HasIndex(item => new
+                {
+                    item.DepartmentId,
+                    item.Name
+                })
+                .IsUnique()
+                .HasDatabaseName("UX_CompanyStructureDivisions_Department_Name");
+            entity.HasIndex(item => new
+                {
+                    item.DepartmentId,
+                    item.SortOrder
+                })
+                .HasDatabaseName("IX_CompanyStructureDivisions_Department_SortOrder");
+            entity.HasOne(item => item.Department)
+                .WithMany(item => item.Divisions)
+                .HasForeignKey(item => item.DepartmentId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CompanyStructurePosition>(entity =>
+        {
+            entity.ToTable("CompanyStructurePositions");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name)
+                .HasMaxLength(160)
+                .IsRequired();
+            entity.HasIndex(item => new
+                {
+                    item.DivisionId,
+                    item.Name
+                })
+                .IsUnique()
+                .HasDatabaseName("UX_CompanyStructurePositions_Division_Name");
+            entity.HasIndex(item => new
+                {
+                    item.DivisionId,
+                    item.SortOrder
+                })
+                .HasDatabaseName("IX_CompanyStructurePositions_Division_SortOrder");
+            entity.HasOne(item => item.Division)
+                .WithMany(item => item.Positions)
+                .HasForeignKey(item => item.DivisionId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

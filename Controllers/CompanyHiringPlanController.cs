@@ -8,6 +8,7 @@ namespace GloryLikeBackend.Controllers;
 [Route("api/company/hiring-plan")]
 public sealed class CompanyHiringPlanController : ControllerBase
 {
+    private const long MaxExcelFileBytes = 5 * 1024 * 1024;
     private readonly ICompanyHiringPlanService _service;
 
     public CompanyHiringPlanController(ICompanyHiringPlanService service)
@@ -69,6 +70,44 @@ public sealed class CompanyHiringPlanController : ControllerBase
         return ToActionResult(await _service.DeleteAsync(
             actorUserId,
             planId,
+            cancellationToken));
+    }
+
+    [HttpPost("import")]
+    [RequestSizeLimit(MaxExcelFileBytes)]
+    public async Task<ActionResult<CompanyHiringPlanResponse>> Import(
+        [FromQuery] int actorUserId,
+        IFormFile? file,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(new CompanyHiringPlanResponse
+            {
+                Success = false,
+                Message = "Select a non-empty .xlsx file.",
+                ErrorCode = CompanyHiringPlanErrorCodes.Validation
+            });
+        }
+
+        if (file.Length > MaxExcelFileBytes
+            || !string.Equals(
+                Path.GetExtension(file.FileName),
+                ".xlsx",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new CompanyHiringPlanResponse
+            {
+                Success = false,
+                Message = "Only .xlsx files up to 5 MB are supported.",
+                ErrorCode = CompanyHiringPlanErrorCodes.Validation
+            });
+        }
+
+        await using var stream = file.OpenReadStream();
+        return ToActionResult(await _service.ImportAsync(
+            actorUserId,
+            stream,
             cancellationToken));
     }
 
