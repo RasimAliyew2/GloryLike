@@ -218,7 +218,19 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
                 .ThenInclude(item => item.Positions)
             .ToListAsync(cancellationToken);
 
-        var taxonomy = await (
+        var availableSeniorities = await _dbContext.Seniorities
+            .AsNoTracking()
+            .OrderBy(item => item.SortOrder)
+            .ThenBy(item => item.Name)
+            .ToListAsync(cancellationToken);
+        if (availableSeniorities.Count == 0)
+        {
+            return Failed(
+                "No seniority levels exist in SQL.",
+                CompanyHiringPlanErrorCodes.Validation);
+        }
+
+        var taxonomyRows = await (
             from jobFamily in _dbContext.JobFamilies.AsNoTracking()
             join position in _dbContext.Positions.AsNoTracking()
                 on jobFamily.Id equals position.JobFamilyId
@@ -226,11 +238,19 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
                 on position.Id equals link.PositionId
             join seniority in _dbContext.Seniorities.AsNoTracking()
                 on link.SeniorityId equals seniority.Id
-            select new TaxonomyImportOption(
-                jobFamily,
-                position,
-                seniority))
+            select new
+            {
+                JobFamily = jobFamily,
+                Position = position,
+                Seniority = seniority
+            })
             .ToListAsync(cancellationToken);
+        var taxonomy = taxonomyRows
+            .Select(item => new TaxonomyImportOption(
+                item.JobFamily,
+                item.Position,
+                item.Seniority))
+            .ToList();
 
         var parsedRows = new List<ParsedImportRow>();
         foreach (var row in rows.Skip(1))
@@ -267,27 +287,23 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
                     $"Department '{departmentName}' does not exist in your company structure.");
             }
 
-            var structurePositionExists = department.Divisions
+            var structurePosition = department.Divisions
                 .SelectMany(item => item.Positions)
-                .Any(item => NameEquals(item.Name, positionName));
-            if (!structurePositionExists)
+                .FirstOrDefault(item => NameEquals(item.Name, positionName));
+            if (structurePosition is null)
             {
                 return RowError(
                     row.RowNumber,
                     $"Position '{positionName}' does not exist under department '{departmentName}' in your company structure.");
             }
 
-            var taxonomyOptions = taxonomy.Where(item =>
-                    NameEquals(item.JobFamily.JobName, departmentName)
-                    && NameEquals(item.Position.Name, positionName))
-                .OrderBy(item => item.Seniority.SortOrder)
+            var taxonomyOptions = taxonomy
+                .Where(item => NameEquals(item.Position.Name, positionName))
+                .OrderByDescending(item =>
+                    NameEquals(item.JobFamily.JobName, departmentName))
+                .ThenBy(item => item.JobFamily.JobName)
+                .ThenBy(item => item.Seniority.SortOrder)
                 .ToList();
-            if (taxonomyOptions.Count == 0)
-            {
-                return RowError(
-                    row.RowNumber,
-                    $"Position '{positionName}' under department '{departmentName}' does not exist in SQL taxonomy.");
-            }
 
             if (!int.TryParse(
                     values[2],
@@ -301,22 +317,25 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
                     "Headcount must be a whole number between 1 and 1000.");
             }
 
-            TaxonomyImportOption? selectedTaxonomy;
+            Seniority? selectedSeniority;
             if (string.IsNullOrWhiteSpace(values[3]))
             {
-                selectedTaxonomy = taxonomyOptions[0];
+                selectedSeniority = availableSeniorities[0];
             }
             else
             {
-                selectedTaxonomy = taxonomyOptions.FirstOrDefault(item =>
-                    NameEquals(item.Seniority.Name, values[3]));
-                if (selectedTaxonomy is null)
+                selectedSeniority = availableSeniorities.FirstOrDefault(item =>
+                    NameEquals(item.Name, values[3]));
+                if (selectedSeniority is null)
                 {
                     return RowError(
                         row.RowNumber,
-                        $"Seniority '{values[3]}' is not available for position '{positionName}'.");
+                        $"Seniority '{values[3]}' does not exist in SQL.");
                 }
             }
+
+            var selectedTaxonomy = taxonomyOptions.FirstOrDefault(item =>
+                item.Seniority.Id == selectedSeniority!.Id);
 
             var priority = string.IsNullOrWhiteSpace(values[4])
                 ? "Medium"
@@ -362,7 +381,10 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
 
             parsedRows.Add(new ParsedImportRow(
                 row.RowNumber,
-                selectedTaxonomy!,
+                department.Name,
+                structurePosition.Name,
+                selectedSeniority!,
+                selectedTaxonomy,
                 headcount,
                 priority,
                 targetStartDate,
@@ -386,9 +408,11 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
             {
                 CompanyOwnerUserId = ownerUserId.Value,
                 CreatedByUserId = actorUserId,
-                JobFamilyId = row.Taxonomy.JobFamily.Id,
-                PositionId = row.Taxonomy.Position.Id,
-                SeniorityId = row.Taxonomy.Seniority.Id,
+                DepartmentName = row.DepartmentName,
+                PositionName = row.PositionName,
+                JobFamilyId = row.Taxonomy?.JobFamily.Id,
+                PositionId = row.Taxonomy?.Position.Id,
+                SeniorityId = row.Seniority.Id,
                 Headcount = row.Headcount,
                 Priority = row.Priority,
                 TargetStartDate = row.TargetStartDate,
@@ -404,9 +428,9 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
 
             for (var index = 0; index < entities.Count; index++)
             {
-                entities[index].JobFamily = parsedRows[index].Taxonomy.JobFamily;
-                entities[index].Position = parsedRows[index].Taxonomy.Position;
-                entities[index].Seniority = parsedRows[index].Taxonomy.Seniority;
+                entities[index].JobFamily = parsedRows[index].Taxonomy?.JobFamily;
+                entities[index].Position = parsedRows[index].Taxonomy?.Position;
+                entities[index].Seniority = parsedRows[index].Seniority;
             }
 
             return new CompanyHiringPlanResponse
@@ -444,28 +468,15 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
         if (!ownerUserId.HasValue)
             return Forbidden();
 
-        var taxonomy = await (
-            from jobFamily in _dbContext.JobFamilies.AsNoTracking()
-            join position in _dbContext.Positions.AsNoTracking()
-                on jobFamily.Id equals position.JobFamilyId
-            join link in _dbContext.PositionSeniorities.AsNoTracking()
-                on position.Id equals link.PositionId
-            join seniority in _dbContext.Seniorities.AsNoTracking()
-                on link.SeniorityId equals seniority.Id
-            where jobFamily.Id == request.JobFamilyId
-                && position.Id == request.PositionId
-                && seniority.Id == request.SeniorityId
-            select new
-            {
-                JobFamily = jobFamily,
-                Position = position,
-                Seniority = seniority
-            }).FirstOrDefaultAsync(cancellationToken);
-
-        if (taxonomy is null)
+        var selectedSeniority = await _dbContext.Seniorities
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                item => item.Id == request.SeniorityId,
+                cancellationToken);
+        if (selectedSeniority is null)
         {
             return Failed(
-                "The selected job, position, and seniority combination does not exist in SQL taxonomy.",
+                "The selected seniority does not exist in SQL.",
                 CompanyHiringPlanErrorCodes.Validation);
         }
 
@@ -477,22 +488,49 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
                 .ThenInclude(item => item.Positions)
             .ToListAsync(cancellationToken);
         var structureDepartment = structureDepartments.FirstOrDefault(item =>
-            NameEquals(item.Name, taxonomy.JobFamily.JobName));
+            NameEquals(item.Name, request.DepartmentName));
         if (structureDepartment is null)
         {
             return Failed(
-                $"Department '{taxonomy.JobFamily.JobName}' does not exist in your company structure.",
+                $"Department '{request.DepartmentName}' does not exist in your company structure.",
                 CompanyHiringPlanErrorCodes.Validation);
         }
 
-        if (!structureDepartment.Divisions
+        var structurePosition = structureDepartment.Divisions
                 .SelectMany(item => item.Positions)
-                .Any(item => NameEquals(item.Name, taxonomy.Position.Name)))
+                .FirstOrDefault(item => NameEquals(item.Name, request.PositionName));
+        if (structurePosition is null)
         {
             return Failed(
-                $"Position '{taxonomy.Position.Name}' does not exist under department '{taxonomy.JobFamily.JobName}' in your company structure.",
+                $"Position '{request.PositionName}' does not exist under department '{structureDepartment.Name}' in your company structure.",
                 CompanyHiringPlanErrorCodes.Validation);
         }
+
+        var taxonomyCandidateRows = await (
+            from jobFamily in _dbContext.JobFamilies.AsNoTracking()
+            join position in _dbContext.Positions.AsNoTracking()
+                on jobFamily.Id equals position.JobFamilyId
+            join link in _dbContext.PositionSeniorities.AsNoTracking()
+                on position.Id equals link.PositionId
+            where link.SeniorityId == selectedSeniority.Id
+            select new
+            {
+                JobFamily = jobFamily,
+                Position = position
+            })
+            .ToListAsync(cancellationToken);
+        var taxonomyCandidates = taxonomyCandidateRows
+            .Select(item => new TaxonomyImportOption(
+                item.JobFamily,
+                item.Position,
+                selectedSeniority))
+            .ToList();
+        var taxonomy = taxonomyCandidates
+            .Where(item => NameEquals(item.Position.Name, structurePosition.Name))
+            .OrderByDescending(item =>
+                NameEquals(item.JobFamily.JobName, structureDepartment.Name))
+            .ThenBy(item => item.JobFamily.JobName)
+            .FirstOrDefault();
 
         CompanyHiringPlan plan;
         var now = DateTime.UtcNow;
@@ -500,6 +538,9 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
         if (planId.HasValue)
         {
             var existingPlan = await _dbContext.CompanyHiringPlans
+                .Include(item => item.JobFamily)
+                .Include(item => item.Position)
+                .Include(item => item.Seniority)
                 .Include(item => item.Vacancies)
                 .FirstOrDefaultAsync(
                     item => item.Id == planId.Value
@@ -519,12 +560,12 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
             }
 
             if (plan.Vacancies.Count > 0
-                && (request.JobFamilyId != plan.JobFamilyId
-                    || request.PositionId != plan.PositionId
+                && (!NameEquals(request.DepartmentName, plan.DepartmentName)
+                    || !NameEquals(request.PositionName, plan.PositionName)
                     || request.SeniorityId != plan.SeniorityId))
             {
                 return Failed(
-                    "Job, position, and seniority cannot be changed after a vacancy is linked.",
+                    "Department, position, and seniority cannot be changed after a vacancy is linked.",
                     CompanyHiringPlanErrorCodes.Conflict);
             }
         }
@@ -539,8 +580,15 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
             _dbContext.CompanyHiringPlans.Add(plan);
         }
 
-        plan.JobFamilyId = request.JobFamilyId;
-        plan.PositionId = request.PositionId;
+        plan.DepartmentName = structureDepartment.Name;
+        plan.PositionName = structurePosition.Name;
+        if (plan.Vacancies.Count == 0)
+        {
+            plan.JobFamily = null;
+            plan.Position = null;
+            plan.JobFamilyId = taxonomy?.JobFamily.Id;
+            plan.PositionId = taxonomy?.Position.Id;
+        }
         plan.SeniorityId = request.SeniorityId;
         plan.Headcount = request.Headcount;
         plan.Priority = request.Priority;
@@ -551,9 +599,12 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        plan.JobFamily = taxonomy.JobFamily;
-        plan.Position = taxonomy.Position;
-        plan.Seniority = taxonomy.Seniority;
+        if (plan.Vacancies.Count == 0)
+        {
+            plan.JobFamily = taxonomy?.JobFamily;
+            plan.Position = taxonomy?.Position;
+        }
+        plan.Seniority = selectedSeniority;
         plan.Vacancies ??= new();
 
         return Successful(
@@ -603,9 +654,14 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
         {
             Id = plan.Id,
             JobFamilyId = plan.JobFamilyId,
-            JobFamilyName = plan.JobFamily.JobName,
+            JobFamilyName = plan.JobFamily?.JobName ?? string.Empty,
+            DepartmentName = string.IsNullOrWhiteSpace(plan.DepartmentName)
+                ? plan.JobFamily?.JobName ?? string.Empty
+                : plan.DepartmentName,
             PositionId = plan.PositionId,
-            PositionName = plan.Position.Name,
+            PositionName = string.IsNullOrWhiteSpace(plan.PositionName)
+                ? plan.Position?.Name ?? string.Empty
+                : plan.PositionName,
             SeniorityId = plan.SeniorityId,
             SeniorityName = plan.Seniority.Name,
             Headcount = plan.Headcount,
@@ -635,6 +691,8 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
 
     private static void Normalize(SaveCompanyHiringPlanRequest request)
     {
+        request.DepartmentName = NormalizeExcelCell(request.DepartmentName);
+        request.PositionName = NormalizeExcelCell(request.PositionName);
         request.Priority = request.Priority?.Trim() ?? string.Empty;
         request.EmploymentType = request.EmploymentType?.Trim() ?? string.Empty;
         request.Notes = request.Notes?.Trim();
@@ -734,12 +792,21 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
 
     private static string Validate(SaveCompanyHiringPlanRequest request)
     {
-        if (request.ActorUserId <= 0
-            || request.JobFamilyId <= 0
-            || request.PositionId <= 0
-            || request.SeniorityId <= 0)
+        if (request.ActorUserId <= 0 || request.SeniorityId <= 0)
         {
-            return "Actor, job, position, and seniority are required.";
+            return "Actor and seniority are required.";
+        }
+
+        if (string.IsNullOrWhiteSpace(request.DepartmentName)
+            || request.DepartmentName.Length > 120)
+        {
+            return "Department is required and can contain at most 120 characters.";
+        }
+
+        if (string.IsNullOrWhiteSpace(request.PositionName)
+            || request.PositionName.Length > 160)
+        {
+            return "Position is required and can contain at most 160 characters.";
         }
 
         if (request.Headcount is < 1 or > 1000)
@@ -798,7 +865,10 @@ public sealed class CompanyHiringPlanService : ICompanyHiringPlanService
 
     private sealed record ParsedImportRow(
         int RowNumber,
-        TaxonomyImportOption Taxonomy,
+        string DepartmentName,
+        string PositionName,
+        Seniority Seniority,
+        TaxonomyImportOption? Taxonomy,
         int Headcount,
         string Priority,
         DateTime? TargetStartDate,

@@ -986,7 +986,6 @@ public sealed class VacancyService : IVacancyService
         if (payload.HiringPlanId.HasValue)
         {
             var hiringPlan = await _dbContext.CompanyHiringPlans
-                .AsNoTracking()
                 .Include(item => item.Vacancies)
                 .FirstOrDefaultAsync(
                     item => item.Id == payload.HiringPlanId.Value
@@ -999,13 +998,18 @@ public sealed class VacancyService : IVacancyService
                     "Hiring plan row was not found for this company.");
             }
 
-            if (hiringPlan.JobFamilyId != payload.JobFamilyId
-                || hiringPlan.PositionId != payload.PositionId
-                || hiringPlan.SeniorityId != payload.SeniorityId)
+            if (hiringPlan.SeniorityId != payload.SeniorityId
+                || (hiringPlan.JobFamilyId.HasValue
+                    && hiringPlan.JobFamilyId.Value != payload.JobFamilyId)
+                || (hiringPlan.PositionId.HasValue
+                    && hiringPlan.PositionId.Value != payload.PositionId))
             {
                 return CreateVacancyResult.Invalid(
                     "Vacancy taxonomy must match the selected hiring plan row.");
             }
+
+            hiringPlan.JobFamilyId ??= payload.JobFamilyId;
+            hiringPlan.PositionId ??= payload.PositionId;
 
             if (hiringPlan.Vacancies.Count >= hiringPlan.Headcount)
             {
@@ -1320,22 +1324,26 @@ public sealed class VacancyService : IVacancyService
         if (payload.HiringPlanId.HasValue)
         {
             var hiringPlan = await _dbContext.CompanyHiringPlans
-                .AsNoTracking()
                 .FirstOrDefaultAsync(
                     item => item.Id == payload.HiringPlanId.Value
                         && item.CompanyOwnerUserId == access.CompanyOwnerUserId,
                     cancellationToken);
 
             if (hiringPlan is null
-                || hiringPlan.JobFamilyId != payload.JobFamilyId
-                || hiringPlan.PositionId != payload.PositionId
-                || hiringPlan.SeniorityId != payload.SeniorityId)
+                || hiringPlan.SeniorityId != payload.SeniorityId
+                || (hiringPlan.JobFamilyId.HasValue
+                    && hiringPlan.JobFamilyId.Value != payload.JobFamilyId)
+                || (hiringPlan.PositionId.HasValue
+                    && hiringPlan.PositionId.Value != payload.PositionId))
             {
                 return UpdateVacancyResult.Invalid(
                     request.EmployerUserId,
                     vacancyId,
                     "Vacancy taxonomy must match its hiring plan row.");
             }
+
+            hiringPlan.JobFamilyId ??= payload.JobFamilyId;
+            hiringPlan.PositionId ??= payload.PositionId;
         }
 
         var jobFamily = await _dbContext.JobFamilies

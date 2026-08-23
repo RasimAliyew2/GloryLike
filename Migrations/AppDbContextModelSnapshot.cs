@@ -350,6 +350,11 @@ namespace GloryLikeBackend.Migrations
                     b.Property<int>("CreatedByUserId")
                         .HasColumnType("int");
 
+                    b.Property<string>("DepartmentName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
                     b.Property<string>("EmploymentType")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -358,7 +363,7 @@ namespace GloryLikeBackend.Migrations
                     b.Property<int>("Headcount")
                         .HasColumnType("int");
 
-                    b.Property<int>("JobFamilyId")
+                    b.Property<int?>("JobFamilyId")
                         .HasColumnType("int");
 
                     b.Property<string>("Notes")
@@ -366,8 +371,13 @@ namespace GloryLikeBackend.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
-                    b.Property<int>("PositionId")
+                    b.Property<int?>("PositionId")
                         .HasColumnType("int");
+
+                    b.Property<string>("PositionName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)");
 
                     b.Property<string>("Priority")
                         .IsRequired()
@@ -1516,14 +1526,12 @@ namespace GloryLikeBackend.Migrations
                     b.HasOne("GloryLikeBackend.Models.SkillAndJob.JobFamily", "JobFamily")
                         .WithMany()
                         .HasForeignKey("JobFamilyId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("GloryLikeBackend.Models.SkillAndJob.Position", "Position")
                         .WithMany()
                         .HasForeignKey("PositionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("GloryLikeBackend.Models.SkillAndJob.Seniority", "Seniority")
                         .WithMany()

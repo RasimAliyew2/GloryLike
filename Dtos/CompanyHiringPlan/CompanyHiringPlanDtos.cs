@@ -7,11 +7,13 @@ public sealed class SaveCompanyHiringPlanRequest
     [Range(1, int.MaxValue)]
     public int ActorUserId { get; set; }
 
-    [Range(1, int.MaxValue)]
-    public int JobFamilyId { get; set; }
+    [Required]
+    [StringLength(120)]
+    public string DepartmentName { get; set; } = string.Empty;
 
-    [Range(1, int.MaxValue)]
-    public int PositionId { get; set; }
+    [Required]
+    [StringLength(160)]
+    public string PositionName { get; set; } = string.Empty;
 
     [Range(1, int.MaxValue)]
     public int SeniorityId { get; set; }
@@ -46,9 +48,10 @@ public sealed class CompanyHiringPlanResponse
 public sealed class CompanyHiringPlanDto
 {
     public int Id { get; set; }
-    public int JobFamilyId { get; set; }
+    public int? JobFamilyId { get; set; }
     public string JobFamilyName { get; set; } = string.Empty;
-    public int PositionId { get; set; }
+    public string DepartmentName { get; set; } = string.Empty;
+    public int? PositionId { get; set; }
     public string PositionName { get; set; } = string.Empty;
     public int SeniorityId { get; set; }
     public string SeniorityName { get; set; } = string.Empty;

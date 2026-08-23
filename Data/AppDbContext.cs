@@ -784,6 +784,12 @@ public class AppDbContext : DbContext
             entity.Property(item => item.Priority)
                 .HasMaxLength(20)
                 .IsRequired();
+            entity.Property(item => item.DepartmentName)
+                .HasMaxLength(120)
+                .IsRequired();
+            entity.Property(item => item.PositionName)
+                .HasMaxLength(160)
+                .IsRequired();
             entity.Property(item => item.EmploymentType)
                 .HasMaxLength(30)
                 .IsRequired();
@@ -811,10 +817,12 @@ public class AppDbContext : DbContext
             entity.HasOne(item => item.JobFamily)
                 .WithMany()
                 .HasForeignKey(item => item.JobFamilyId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.Position)
                 .WithMany()
                 .HasForeignKey(item => item.PositionId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.Seniority)
                 .WithMany()
