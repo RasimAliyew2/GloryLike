@@ -271,6 +271,61 @@ namespace GloryLikeBackend.Migrations
                     b.ToTable("Skills");
                 });
 
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyCandidateMessage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<int>("CandidateUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CompanyOwnerUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ReadAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("RecipientUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SenderUserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CandidateUserId");
+
+                    b.HasIndex("CompanyOwnerUserId");
+
+                    b.HasIndex("RecipientUserId");
+
+                    b.HasIndex("SenderUserId");
+
+                    b.HasIndex("CompanyOwnerUserId", "CandidateUserId", "CreatedAtUtc")
+                        .HasDatabaseName("IX_CompanyCandidateMessages_CandidateThread");
+
+                    b.HasIndex("CompanyOwnerUserId", "RecipientUserId", "ReadAtUtc")
+                        .HasDatabaseName("IX_CompanyCandidateMessages_RecipientUnread");
+
+                    b.ToTable("CompanyCandidateMessages", (string)null, t =>
+                        {
+                            t.HasCheckConstraint(
+                                "CK_CompanyCandidateMessages_DifferentUsers",
+                                "[SenderUserId] <> [RecipientUserId]");
+                        });
+                });
+
             modelBuilder.Entity("GloryLikeBackend.Models.CompanyTeamInvitation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1445,6 +1500,41 @@ namespace GloryLikeBackend.Migrations
                         .HasDatabaseName("UX_VacancySkillRequirements_VacancyId_SkillId");
 
                     b.ToTable("VacancySkillRequirements", (string)null);
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyCandidateMessage", b =>
+                {
+                    b.HasOne("GloryLikeBackend.Models.User", "Candidate")
+                        .WithMany()
+                        .HasForeignKey("CandidateUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GloryLikeBackend.Models.User", "CompanyOwner")
+                        .WithMany()
+                        .HasForeignKey("CompanyOwnerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GloryLikeBackend.Models.User", "Recipient")
+                        .WithMany()
+                        .HasForeignKey("RecipientUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GloryLikeBackend.Models.User", "Sender")
+                        .WithMany()
+                        .HasForeignKey("SenderUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Candidate");
+
+                    b.Navigation("CompanyOwner");
+
+                    b.Navigation("Recipient");
+
+                    b.Navigation("Sender");
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.CompanyTeamInvitation", b =>

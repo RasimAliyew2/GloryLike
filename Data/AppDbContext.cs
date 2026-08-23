@@ -28,6 +28,12 @@ public class AppDbContext : DbContext
         set;
     }
 
+    public DbSet<CompanyCandidateMessage> CompanyCandidateMessages
+    {
+        get;
+        set;
+    }
+
     public DbSet<CompanyProfile> CompanyProfiles { get; set; }
 
     public DbSet<CompanyLocation> CompanyLocations { get; set; }
@@ -233,6 +239,7 @@ public class AppDbContext : DbContext
         });
 
         ConfigureCompanyTeamInvitations(modelBuilder);
+        ConfigureCompanyCandidateMessages(modelBuilder);
         ConfigureCompanyProfiles(modelBuilder);
         ConfigureCompanyLocations(modelBuilder);
         ConfigureCompanyStructure(modelBuilder);
@@ -300,6 +307,61 @@ public class AppDbContext : DbContext
         ConfigureUserSkills(modelBuilder);
         ConfigureUserJobs(modelBuilder);
         ConfigureVacancies(modelBuilder);
+    }
+
+    private static void ConfigureCompanyCandidateMessages(
+        ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CompanyCandidateMessage>(entity =>
+        {
+            entity.ToTable(
+                "CompanyCandidateMessages",
+                table => table.HasCheckConstraint(
+                    "CK_CompanyCandidateMessages_DifferentUsers",
+                    "[SenderUserId] <> [RecipientUserId]"));
+            entity.HasKey(item => item.Id);
+
+            entity.Property(item => item.Body)
+                .HasMaxLength(4000)
+                .IsRequired();
+            entity.Property(item => item.CreatedAtUtc)
+                .IsRequired();
+
+            entity.HasIndex(item => new
+                {
+                    item.CompanyOwnerUserId,
+                    item.RecipientUserId,
+                    item.ReadAtUtc
+                })
+                .HasDatabaseName(
+                    "IX_CompanyCandidateMessages_RecipientUnread");
+
+            entity.HasIndex(item => new
+                {
+                    item.CompanyOwnerUserId,
+                    item.CandidateUserId,
+                    item.CreatedAtUtc
+                })
+                .HasDatabaseName(
+                    "IX_CompanyCandidateMessages_CandidateThread");
+
+            entity.HasOne(item => item.CompanyOwner)
+                .WithMany()
+                .HasForeignKey(item => item.CompanyOwnerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Sender)
+                .WithMany()
+                .HasForeignKey(item => item.SenderUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Recipient)
+                .WithMany()
+                .HasForeignKey(item => item.RecipientUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Candidate)
+                .WithMany()
+                .HasForeignKey(item => item.CandidateUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
     }
 
     private static void ConfigureJobTaxonomy(ModelBuilder modelBuilder)
