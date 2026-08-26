@@ -17,19 +17,70 @@ public sealed class OrganizationReportsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<OrganizationReportsResponse>> Get(
+    public async Task<ActionResult<OrganizationReportCatalogResponse>> GetCatalog(
         [FromQuery] int actorUserId,
         CancellationToken cancellationToken)
     {
-        var response = await _reportsService.GetAsync(
+        var response = await _reportsService.GetCatalogAsync(
             actorUserId,
             cancellationToken);
 
-        if (response.Success)
+        return ToActionResult(response.Success, response.ErrorCode, response);
+    }
+
+    [HttpGet("vacancy-creation")]
+    public async Task<ActionResult<VacancyCreationReportResponse>>
+        ExecuteVacancyCreationReport(
+            [FromQuery] int actorUserId,
+            [FromQuery] DateTime dateFrom,
+            [FromQuery] DateTime dateTo,
+            CancellationToken cancellationToken)
+    {
+        var response = await _reportsService.ExecuteVacancyCreationReportAsync(
+            actorUserId,
+            dateFrom,
+            dateTo,
+            cancellationToken);
+
+        return ToActionResult(response.Success, response.ErrorCode, response);
+    }
+
+    [HttpGet("employees/{employeeUserId:int}")]
+    public async Task<ActionResult<ReportEmployeeProfileResponse>>
+        GetEmployeeProfile(
+            int employeeUserId,
+            [FromQuery] int actorUserId,
+            CancellationToken cancellationToken)
+    {
+        var response = await _reportsService.GetEmployeeProfileAsync(
+            actorUserId,
+            employeeUserId,
+            cancellationToken);
+
+        return ToActionResult(response.Success, response.ErrorCode, response);
+    }
+
+    private ActionResult<TResponse> ToActionResult<TResponse>(
+        bool success,
+        string errorCode,
+        TResponse response)
+    {
+        if (success)
             return Ok(response);
 
-        return response.ErrorCode == "forbidden"
-            ? StatusCode(StatusCodes.Status403Forbidden, response)
-            : NotFound(response);
+        return errorCode switch
+        {
+            ReportErrorCodes.Validation => BadRequest(response),
+            ReportErrorCodes.Forbidden => StatusCode(
+                StatusCodes.Status403Forbidden,
+                response),
+            _ => NotFound(response)
+        };
     }
+}
+
+internal static class ReportErrorCodes
+{
+    public const string Validation = "validation";
+    public const string Forbidden = "forbidden";
 }
