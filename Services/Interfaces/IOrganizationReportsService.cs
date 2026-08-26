@@ -8,6 +8,12 @@ public interface IOrganizationReportsService
         int actorUserId,
         CancellationToken cancellationToken = default);
 
+    Task<OrganizationAnalyticsDashboardResponse> GetDashboardAsync(
+        int actorUserId,
+        DateTime dateFrom,
+        DateTime dateTo,
+        CancellationToken cancellationToken = default);
+
     Task<VacancyCreationReportResponse> ExecuteVacancyCreationReportAsync(
         int actorUserId,
         DateTime dateFrom,

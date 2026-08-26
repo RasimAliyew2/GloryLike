@@ -153,3 +153,6 @@ C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\r
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\rjsmrazor.dswa.cache.json
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\rjsmcshtml.dswa.cache.json
 C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\obj\Debug\net8.0\staticwebassets.build.json.cache
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\bin\Debug\net8.0\AngleSharp.dll
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\bin\Debug\net8.0\AngleSharp.Css.dll
+C:\Users\Rasim\source\repos\GloryLikeBackend\GloryLikeBackend\bin\Debug\net8.0\HtmlSanitizer.dll

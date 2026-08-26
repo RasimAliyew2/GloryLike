@@ -45,6 +45,23 @@ public sealed class OrganizationReportsController : ControllerBase
         return ToActionResult(response.Success, response.ErrorCode, response);
     }
 
+    [HttpGet("dashboard")]
+    public async Task<ActionResult<OrganizationAnalyticsDashboardResponse>>
+        GetDashboard(
+            [FromQuery] int actorUserId,
+            [FromQuery] DateTime dateFrom,
+            [FromQuery] DateTime dateTo,
+            CancellationToken cancellationToken)
+    {
+        var response = await _reportsService.GetDashboardAsync(
+            actorUserId,
+            dateFrom,
+            dateTo,
+            cancellationToken);
+
+        return ToActionResult(response.Success, response.ErrorCode, response);
+    }
+
     [HttpGet("employees/{employeeUserId:int}")]
     public async Task<ActionResult<ReportEmployeeProfileResponse>>
         GetEmployeeProfile(
