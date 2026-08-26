@@ -3,6 +3,7 @@ using GloryLikeBackend.Dtos.CompanyStructure;
 using GloryLikeBackend.Models;
 using GloryLikeBackend.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 
 namespace GloryLikeBackend.Services;
 
@@ -10,9 +11,12 @@ public sealed class CompanyStructureService : ICompanyStructureService
 {
     private static readonly string[] StructureHeaders =
     [
-        "Department",
-        "Division",
-        "Position"
+        "Department / Департамент / Departament",
+        "Division / Отдел / Şöbə",
+        "Position / Должность / Vəzifə",
+        "Seniority / Уровень / Səviyyə",
+        "Headcount / Количество / Say",
+        "Reports To / Подчиняется / Tabedir"
     ];
 
     private readonly AppDbContext _dbContext;
@@ -120,10 +124,16 @@ public sealed class CompanyStructureService : ICompanyStructureService
             var departmentName = Cell(row, 0);
             var divisionName = Cell(row, 1);
             var positionName = Cell(row, 2);
+            var seniority = Cell(row, 3);
+            var headcountValue = Cell(row, 4);
+            var reportsTo = Cell(row, 5);
 
             if (string.IsNullOrWhiteSpace(departmentName)
                 && string.IsNullOrWhiteSpace(divisionName)
-                && string.IsNullOrWhiteSpace(positionName))
+                && string.IsNullOrWhiteSpace(positionName)
+                && string.IsNullOrWhiteSpace(seniority)
+                && string.IsNullOrWhiteSpace(headcountValue)
+                && string.IsNullOrWhiteSpace(reportsTo))
             {
                 continue;
             }
@@ -135,11 +145,35 @@ public sealed class CompanyStructureService : ICompanyStructureService
                     CompanyStructureErrorCodes.Import);
             }
 
-            if (string.IsNullOrWhiteSpace(divisionName)
-                && !string.IsNullOrWhiteSpace(positionName))
+            if (string.IsNullOrWhiteSpace(positionName)
+                && (!string.IsNullOrWhiteSpace(seniority)
+                    || !string.IsNullOrWhiteSpace(headcountValue)
+                    || !string.IsNullOrWhiteSpace(reportsTo)))
             {
                 return Failed(
-                    $"Row {row.RowNumber}: Division is required when a position is provided.",
+                    $"Row {row.RowNumber}: Position is required when position details are provided.",
+                    CompanyStructureErrorCodes.Import);
+            }
+
+            if (!string.IsNullOrWhiteSpace(positionName)
+                && string.IsNullOrWhiteSpace(seniority))
+            {
+                return Failed(
+                    $"Row {row.RowNumber}: Seniority is required when a position is provided.",
+                    CompanyStructureErrorCodes.Import);
+            }
+
+            var headcount = 1;
+            if (!string.IsNullOrWhiteSpace(positionName)
+                && (!int.TryParse(
+                        headcountValue,
+                        NumberStyles.Integer,
+                        CultureInfo.InvariantCulture,
+                        out headcount)
+                    || headcount is < 1 or > 10000))
+            {
+                return Failed(
+                    $"Row {row.RowNumber}: Headcount must be a whole number between 1 and 10000.",
                     CompanyStructureErrorCodes.Import);
             }
 
@@ -154,7 +188,8 @@ public sealed class CompanyStructureService : ICompanyStructureService
                 departments.Add(department);
             }
 
-            if (string.IsNullOrWhiteSpace(divisionName))
+            if (string.IsNullOrWhiteSpace(divisionName)
+                && string.IsNullOrWhiteSpace(positionName))
                 continue;
 
             var division = department.Divisions.FirstOrDefault(item =>
@@ -168,15 +203,27 @@ public sealed class CompanyStructureService : ICompanyStructureService
                 department.Divisions.Add(division);
             }
 
-            if (string.IsNullOrWhiteSpace(positionName)
-                || division.Positions.Any(item => NameEquals(item.Name, positionName)))
+            if (string.IsNullOrWhiteSpace(positionName))
             {
                 continue;
             }
 
+            if (division.Positions.Any(item => NameEquals(item.Name, positionName)))
+            {
+                var scope = string.IsNullOrWhiteSpace(divisionName)
+                    ? $"department '{departmentName}'"
+                    : $"division '{divisionName}'";
+                return Failed(
+                    $"Row {row.RowNumber}: Position '{positionName}' is duplicated in {scope}. Use Headcount for multiple employees in the same position.",
+                    CompanyStructureErrorCodes.Import);
+            }
+
             division.Positions.Add(new SaveCompanyStructurePositionRequest
             {
-                Name = positionName
+                Name = positionName,
+                Seniority = seniority,
+                Headcount = headcount,
+                ReportsTo = reportsTo
             });
         }
 
@@ -225,7 +272,15 @@ public sealed class CompanyStructureService : ICompanyStructureService
         {
             if (department.Divisions.Count == 0)
             {
-                rows.Add([department.Name, string.Empty, string.Empty]);
+                rows.Add(
+                [
+                    department.Name,
+                    string.Empty,
+                    string.Empty,
+                    string.Empty,
+                    string.Empty,
+                    string.Empty
+                ]);
                 continue;
             }
 
@@ -233,18 +288,43 @@ public sealed class CompanyStructureService : ICompanyStructureService
             {
                 if (division.Positions.Count == 0)
                 {
-                    rows.Add([department.Name, division.Name, string.Empty]);
+                    rows.Add(
+                    [
+                        department.Name,
+                        division.Name,
+                        string.Empty,
+                        string.Empty,
+                        string.Empty,
+                        string.Empty
+                    ]);
                     continue;
                 }
 
                 rows.AddRange(division.Positions.Select(position =>
                     (IReadOnlyList<string>)
-                    [department.Name, division.Name, position.Name]));
+                    [
+                        department.Name,
+                        division.Name,
+                        position.Name,
+                        position.Seniority,
+                        position.Headcount.ToString(CultureInfo.InvariantCulture),
+                        position.ReportsTo
+                    ]));
             }
         }
 
         while (rows.Count < 25)
-            rows.Add([string.Empty, string.Empty, string.Empty]);
+        {
+            rows.Add(
+            [
+                string.Empty,
+                string.Empty,
+                string.Empty,
+                string.Empty,
+                string.Empty,
+                string.Empty
+            ]);
+        }
 
         return new CompanyStructureExportResult
         {
@@ -290,6 +370,9 @@ public sealed class CompanyStructureService : ICompanyStructureService
                                 new CompanyStructurePosition
                                 {
                                     Name = position.Name,
+                                    Seniority = position.Seniority,
+                                    Headcount = position.Headcount,
+                                    ReportsTo = position.ReportsTo,
                                     SortOrder = positionIndex + 1
                                 }).ToList()
                         }).ToList()
@@ -350,7 +433,11 @@ public sealed class CompanyStructureService : ICompanyStructureService
                 division.Name = NormalizeName(division.Name);
                 division.Positions ??= new();
                 foreach (var position in division.Positions)
+                {
                     position.Name = NormalizeName(position.Name);
+                    position.Seniority = NormalizeName(position.Seniority);
+                    position.ReportsTo = NormalizeName(position.ReportsTo);
+                }
             }
         }
     }
@@ -387,8 +474,6 @@ public sealed class CompanyStructureService : ICompanyStructureService
 
             foreach (var division in department.Divisions)
             {
-                if (string.IsNullOrWhiteSpace(division.Name))
-                    return $"Division name is required in department '{department.Name}'.";
                 if (division.Name.Length > 120)
                     return $"Division '{division.Name}' is longer than 120 characters.";
 
@@ -398,15 +483,29 @@ public sealed class CompanyStructureService : ICompanyStructureService
                     .FirstOrDefault(group => group.Count() > 1);
                 if (duplicatePosition is not null)
                 {
-                    return $"Position '{duplicatePosition.Key}' is duplicated in division '{division.Name}'.";
+                    var scope = string.IsNullOrWhiteSpace(division.Name)
+                        ? $"department '{department.Name}'"
+                        : $"division '{division.Name}'";
+                    return $"Position '{duplicatePosition.Key}' is duplicated in {scope}.";
                 }
 
                 foreach (var position in division.Positions)
                 {
+                    var scope = string.IsNullOrWhiteSpace(division.Name)
+                        ? $"department '{department.Name}'"
+                        : $"division '{division.Name}'";
                     if (string.IsNullOrWhiteSpace(position.Name))
-                        return $"Position name is required in division '{division.Name}'.";
+                        return $"Position name is required in {scope}.";
                     if (position.Name.Length > 160)
                         return $"Position '{position.Name}' is longer than 160 characters.";
+                    if (string.IsNullOrWhiteSpace(position.Seniority))
+                        return $"Seniority is required for position '{position.Name}'.";
+                    if (position.Seniority.Length > 50)
+                        return $"Seniority for position '{position.Name}' is longer than 50 characters.";
+                    if (position.Headcount is < 1 or > 10000)
+                        return $"Headcount for position '{position.Name}' must be between 1 and 10000.";
+                    if (position.ReportsTo.Length > 160)
+                        return $"Reports To for position '{position.Name}' is longer than 160 characters.";
                 }
             }
         }
@@ -498,6 +597,9 @@ public sealed class CompanyStructureService : ICompanyStructureService
                         {
                             Id = position.Id,
                             Name = position.Name,
+                            Seniority = position.Seniority,
+                            Headcount = position.Headcount,
+                            ReportsTo = position.ReportsTo,
                             SortOrder = position.SortOrder
                         })
                         .ToList()

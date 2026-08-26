@@ -21,7 +21,6 @@ public sealed class SaveCompanyStructureDepartmentRequest
 
 public sealed class SaveCompanyStructureDivisionRequest
 {
-    [Required]
     [StringLength(120)]
     public string Name { get; set; } = string.Empty;
 
@@ -33,6 +32,16 @@ public sealed class SaveCompanyStructurePositionRequest
     [Required]
     [StringLength(160)]
     public string Name { get; set; } = string.Empty;
+
+    [Required]
+    [StringLength(50)]
+    public string Seniority { get; set; } = "Not specified";
+
+    [Range(1, 10000)]
+    public int Headcount { get; set; } = 1;
+
+    [StringLength(160)]
+    public string ReportsTo { get; set; } = string.Empty;
 }
 
 public sealed class CompanyStructureResponse
@@ -64,6 +73,9 @@ public sealed class CompanyStructurePositionDto
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string Seniority { get; set; } = "Not specified";
+    public int Headcount { get; set; } = 1;
+    public string ReportsTo { get; set; } = string.Empty;
     public int SortOrder { get; set; }
 }
 
@@ -72,7 +84,7 @@ public sealed class CompanyStructureExportResult
     public bool Success { get; set; }
     public string Message { get; set; } = string.Empty;
     public string ErrorCode { get; set; } = string.Empty;
-    public string FileName { get; set; } = "BothFind-Company-Structure.xlsx";
+    public string FileName { get; set; } = "BothFind_Template_OrgStructure.xlsx";
     public byte[] Content { get; set; } = Array.Empty<byte>();
 }
 

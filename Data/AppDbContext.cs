@@ -811,10 +811,25 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<CompanyStructurePosition>(entity =>
         {
-            entity.ToTable("CompanyStructurePositions");
+            entity.ToTable(
+                "CompanyStructurePositions",
+                table => table.HasCheckConstraint(
+                    "CK_CompanyStructurePositions_Headcount",
+                    "[Headcount] >= 1 AND [Headcount] <= 10000"));
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Name)
                 .HasMaxLength(160)
+                .IsRequired();
+            entity.Property(item => item.Seniority)
+                .HasMaxLength(50)
+                .HasDefaultValue("Not specified")
+                .IsRequired();
+            entity.Property(item => item.Headcount)
+                .HasDefaultValue(1)
+                .IsRequired();
+            entity.Property(item => item.ReportsTo)
+                .HasMaxLength(160)
+                .HasDefaultValue(string.Empty)
                 .IsRequired();
             entity.HasIndex(item => new
                 {

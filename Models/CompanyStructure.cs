@@ -29,6 +29,9 @@ public sealed class CompanyStructurePosition
     public int Id { get; set; }
     public int DivisionId { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string Seniority { get; set; } = "Not specified";
+    public int Headcount { get; set; } = 1;
+    public string ReportsTo { get; set; } = string.Empty;
     public int SortOrder { get; set; }
 
     public CompanyStructureDivision Division { get; set; } = null!;

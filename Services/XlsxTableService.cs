@@ -305,7 +305,7 @@ public sealed class XlsxTableService : IXlsxTableService
           <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
           <cellXfs count="3">
             <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
-            <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+            <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
             <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>
           </cellXfs>
           <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
@@ -341,12 +341,19 @@ public sealed class XlsxTableService : IXlsxTableService
             writer.WriteEndElement();
 
             writer.WriteStartElement("cols", SpreadsheetNamespace.NamespaceName);
+            var isOrganizationTemplate = headers.Count == 6
+                && headers[0].StartsWith("Department /", StringComparison.Ordinal);
+            string[] organizationTemplateWidths = ["34", "30", "34", "28", "28", "34"];
             for (var index = 0; index < headers.Count; index++)
             {
                 writer.WriteStartElement("col", SpreadsheetNamespace.NamespaceName);
                 writer.WriteAttributeString("min", (index + 1).ToString(CultureInfo.InvariantCulture));
                 writer.WriteAttributeString("max", (index + 1).ToString(CultureInfo.InvariantCulture));
-                writer.WriteAttributeString("width", index == headers.Count - 1 ? "30" : "24");
+                writer.WriteAttributeString(
+                    "width",
+                    isOrganizationTemplate
+                        ? organizationTemplateWidths[index]
+                        : index == headers.Count - 1 ? "30" : "24");
                 writer.WriteAttributeString("customWidth", "1");
                 writer.WriteEndElement();
             }
@@ -380,7 +387,9 @@ public sealed class XlsxTableService : IXlsxTableService
         writer.WriteAttributeString("r", rowNumber.ToString(CultureInfo.InvariantCulture));
         if (rowNumber == 1)
         {
-            writer.WriteAttributeString("ht", "28");
+            var isOrganizationTemplate = cells.Count == 6
+                && cells[0].StartsWith("Department /", StringComparison.Ordinal);
+            writer.WriteAttributeString("ht", isOrganizationTemplate ? "42" : "28");
             writer.WriteAttributeString("customHeight", "1");
         }
 

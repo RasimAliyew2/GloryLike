@@ -742,10 +742,29 @@ namespace GloryLikeBackend.Migrations
                     b.Property<int>("DivisionId")
                         .HasColumnType("int");
 
+                    b.Property<int>("Headcount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(160)
                         .HasColumnType("nvarchar(160)");
+
+                    b.Property<string>("ReportsTo")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)")
+                        .HasDefaultValue("");
+
+                    b.Property<string>("Seniority")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasDefaultValue("Not specified");
 
                     b.Property<int>("SortOrder")
                         .HasColumnType("int");
@@ -759,7 +778,12 @@ namespace GloryLikeBackend.Migrations
                         .IsUnique()
                         .HasDatabaseName("UX_CompanyStructurePositions_Division_Name");
 
-                    b.ToTable("CompanyStructurePositions", (string)null);
+                    b.ToTable("CompanyStructurePositions", (string)null, t =>
+                        {
+                            t.HasCheckConstraint(
+                                "CK_CompanyStructurePositions_Headcount",
+                                "[Headcount] >= 1 AND [Headcount] <= 10000");
+                        });
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.PendingEmailRegistration", b =>
