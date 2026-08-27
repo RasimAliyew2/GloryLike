@@ -1029,6 +1029,9 @@ public class AppDbContext : DbContext
             entity.Property(item => item.Status)
                 .HasMaxLength(30)
                 .IsRequired();
+            entity.Property(item => item.FunnelStageName)
+                .HasMaxLength(100)
+                .IsRequired();
             entity.Property(item => item.AppliedAtUtc)
                 .IsRequired();
             entity.Property(item => item.UpdatedAtUtc)
@@ -1036,6 +1039,15 @@ public class AppDbContext : DbContext
 
             entity.HasIndex(item => item.CandidateUserId)
                 .HasDatabaseName("IX_VacancyApplications_CandidateUserId");
+            entity.HasIndex(item => new
+                {
+                    item.VacancyId,
+                    item.FunnelStageName
+                })
+                .HasDatabaseName(
+                    "IX_VacancyApplications_VacancyId_FunnelStageName");
+            entity.HasIndex(item => item.HiredAtUtc)
+                .HasDatabaseName("IX_VacancyApplications_HiredAtUtc");
             entity.HasIndex(item => new
                 {
                     item.VacancyId,

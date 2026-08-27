@@ -39,6 +39,13 @@ public interface IVacancyService
         IReadOnlyCollection<CandidateScreeningAnswerRequest> answers,
         CancellationToken cancellationToken = default);
 
+    Task<MoveApplicantFunnelStageResult> MoveApplicantFunnelStageAsync(
+        int employerUserId,
+        int vacancyId,
+        int applicationId,
+        string stageName,
+        CancellationToken cancellationToken = default);
+
     Task<CreateVacancyResult> CreateAsync(
         CreateVacancyRequest request,
         CancellationToken cancellationToken = default);
@@ -47,6 +54,83 @@ public interface IVacancyService
         int vacancyId,
         CreateVacancyRequest request,
         CancellationToken cancellationToken = default);
+}
+
+public enum MoveApplicantFunnelStageFailureKind
+{
+    None = 0,
+    Validation = 1,
+    NotFound = 2
+}
+
+public sealed class MoveApplicantFunnelStageResult
+{
+    public bool Success { get; private set; }
+    public string Message { get; private set; } = string.Empty;
+    public int VacancyId { get; private set; }
+    public int ApplicationId { get; private set; }
+    public string FunnelStageName { get; private set; } = string.Empty;
+    public DateTime? FunnelStageUpdatedAtUtc { get; private set; }
+    public DateTime? HiredAtUtc { get; private set; }
+    public MoveApplicantFunnelStageFailureKind FailureKind { get; private set; }
+
+    public static MoveApplicantFunnelStageResult Moved(
+        VacancyApplication application,
+        bool changed)
+    {
+        return new MoveApplicantFunnelStageResult
+        {
+            Success = true,
+            Message = changed
+                ? $"Candidate moved to {application.FunnelStageName}."
+                : $"Candidate is already in {application.FunnelStageName}.",
+            VacancyId = application.VacancyId,
+            ApplicationId = application.Id,
+            FunnelStageName = application.FunnelStageName,
+            FunnelStageUpdatedAtUtc = application.FunnelStageUpdatedAtUtc,
+            HiredAtUtc = application.HiredAtUtc
+        };
+    }
+
+    public static MoveApplicantFunnelStageResult Invalid(
+        int vacancyId,
+        int applicationId,
+        string message)
+    {
+        return Failed(
+            vacancyId,
+            applicationId,
+            message,
+            MoveApplicantFunnelStageFailureKind.Validation);
+    }
+
+    public static MoveApplicantFunnelStageResult NotFound(
+        int vacancyId,
+        int applicationId,
+        string message)
+    {
+        return Failed(
+            vacancyId,
+            applicationId,
+            message,
+            MoveApplicantFunnelStageFailureKind.NotFound);
+    }
+
+    private static MoveApplicantFunnelStageResult Failed(
+        int vacancyId,
+        int applicationId,
+        string message,
+        MoveApplicantFunnelStageFailureKind failureKind)
+    {
+        return new MoveApplicantFunnelStageResult
+        {
+            Success = false,
+            Message = message,
+            VacancyId = vacancyId,
+            ApplicationId = applicationId,
+            FailureKind = failureKind
+        };
+    }
 }
 
 public enum ToggleEmployerVacancyStatusFailureKind

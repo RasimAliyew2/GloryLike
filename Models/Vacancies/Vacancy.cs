@@ -93,6 +93,9 @@ public sealed class VacancyApplication
     public int CandidateUserId { get; set; }
     public string Status { get; set; } =
         VacancyApplicationStatuses.NoResponseYet;
+    public string FunnelStageName { get; set; } = string.Empty;
+    public DateTime? FunnelStageUpdatedAtUtc { get; set; }
+    public DateTime? HiredAtUtc { get; set; }
     public DateTime AppliedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
     public Vacancy Vacancy { get; set; } = null!;

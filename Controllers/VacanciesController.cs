@@ -186,6 +186,50 @@ public sealed class VacanciesController : ControllerBase
         return Ok(response);
     }
 
+    [HttpPost("{vacancyId:int}/applications/{applicationId:int}/funnel-stage")]
+    [ProducesResponseType(
+        typeof(MoveApplicantFunnelStageResponse),
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(MoveApplicantFunnelStageResponse),
+        StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(
+        typeof(MoveApplicantFunnelStageResponse),
+        StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<MoveApplicantFunnelStageResponse>>
+        MoveApplicantFunnelStage(
+            int vacancyId,
+            int applicationId,
+            [FromBody] MoveApplicantFunnelStageRequest request,
+            CancellationToken cancellationToken)
+    {
+        var result = await _vacancyService.MoveApplicantFunnelStageAsync(
+            request.EmployerUserId,
+            vacancyId,
+            applicationId,
+            request.StageName,
+            cancellationToken);
+
+        var response = new MoveApplicantFunnelStageResponse
+        {
+            Success = result.Success,
+            Message = result.Message,
+            VacancyId = result.VacancyId,
+            ApplicationId = result.ApplicationId,
+            FunnelStageName = result.FunnelStageName,
+            FunnelStageUpdatedAtUtc = result.FunnelStageUpdatedAtUtc,
+            HiredAtUtc = result.HiredAtUtc
+        };
+
+        if (result.Success)
+            return Ok(response);
+
+        return result.FailureKind
+            == MoveApplicantFunnelStageFailureKind.NotFound
+                ? NotFound(response)
+                : BadRequest(response);
+    }
+
     [HttpGet("employer/{employerUserId:int}/{vacancyId:int}/edit")]
     [ProducesResponseType(
         typeof(EmployerVacancyEditResponse),

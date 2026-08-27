@@ -164,11 +164,36 @@ public sealed class OrganizationReportsService : IOrganizationReportsService
                 && application.AppliedAtUtc < toExclusive)
             .Select(application => new ApplicationProjection
             {
+                ApplicationId = application.Id,
+                VacancyId = application.VacancyId,
                 EmployerUserId = application.Vacancy.EmployerUserId,
                 Status = application.Status,
+                FunnelStageName = application.FunnelStageName,
+                HiredAtUtc = application.HiredAtUtc,
                 AppliedAtUtc = application.AppliedAtUtc
             })
             .OrderBy(application => application.AppliedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        var hiredApplications = await _dbContext.VacancyApplications
+            .AsNoTracking()
+            .Where(application =>
+                application.Vacancy.CompanyOwnerUserId
+                    == access.CompanyOwnerUserId
+                && application.HiredAtUtc.HasValue
+                && application.HiredAtUtc.Value >= from
+                && application.HiredAtUtc.Value < toExclusive)
+            .Select(application => new ApplicationProjection
+            {
+                ApplicationId = application.Id,
+                VacancyId = application.VacancyId,
+                EmployerUserId = application.Vacancy.EmployerUserId,
+                Status = application.Status,
+                FunnelStageName = application.FunnelStageName,
+                HiredAtUtc = application.HiredAtUtc,
+                AppliedAtUtc = application.AppliedAtUtc
+            })
+            .OrderBy(application => application.HiredAtUtc)
             .ToListAsync(cancellationToken);
 
         var vacancyIds = vacancies.Select(vacancy => vacancy.Id).ToList();
@@ -214,6 +239,8 @@ public sealed class OrganizationReportsService : IOrganizationReportsService
             .Concat(vacancies.Select(vacancy => vacancy.EmployerUserId))
             .Concat(applications.Select(application =>
                 application.EmployerUserId))
+            .Concat(hiredApplications.Select(application =>
+                application.EmployerUserId))
             .Append(access.CompanyOwnerUserId)
             .Distinct()
             .ToList();
@@ -244,6 +271,9 @@ public sealed class OrganizationReportsService : IOrganizationReportsService
         var applicationCountByEmployee = applications
             .GroupBy(application => application.EmployerUserId)
             .ToDictionary(group => group.Key, group => group.Count());
+        var hiredCountByEmployee = hiredApplications
+            .GroupBy(application => application.EmployerUserId)
+            .ToDictionary(group => group.Key, group => group.Count());
 
         var monthlyActivity = BuildMonthRange(from, to)
             .Select(monthStart =>
@@ -260,16 +290,20 @@ public sealed class OrganizationReportsService : IOrganizationReportsService
                         "MMM yyyy",
                         CultureInfo.InvariantCulture),
                     Applications = applicationCount,
-                    Hired = DemoHiredCount(applicationCount),
-                    HiredIsDemo = true
+                    Hired = hiredApplications.Count(application =>
+                        application.HiredAtUtc!.Value.Year == monthStart.Year
+                        && application.HiredAtUtc.Value.Month
+                            == monthStart.Month),
+                    HiredIsDemo = false
                 };
             })
             .ToList();
 
         var totalApplications = applications.Count;
-        var demoHiredCount = monthlyActivity.Sum(month => month.Hired);
+        var hiredCount = hiredApplications.Count;
         var inProcessApplications = applications.Count(application =>
-            IsInProcessApplicationStatus(application.Status));
+            !application.HiredAtUtc.HasValue
+            && IsInProcessApplicationStatus(application.Status));
         var screeningPassed = applications.Count(application => string.Equals(
             application.Status,
             VacancyApplicationStatuses.ScreeningPassed,
@@ -278,11 +312,10 @@ public sealed class OrganizationReportsService : IOrganizationReportsService
             application.Status,
             VacancyApplicationStatuses.ScreeningFailed,
             StringComparison.OrdinalIgnoreCase));
-        var demoInterview = DemoStageCount(totalApplications, 0.42m);
-        var demoOffer = Math.Min(
-            demoInterview,
-            DemoStageCount(totalApplications, 0.26m));
-        var demoHired = Math.Min(demoOffer, demoHiredCount);
+        var interviewCount = applications.Count(application =>
+            StageNameContains(application.FunnelStageName, "Interview"));
+        var offerCount = applications.Count(application =>
+            StageNameContains(application.FunnelStageName, "Offer"));
 
         var funnelStages = new List<ReportsFunnelStageDto>
         {
@@ -302,22 +335,19 @@ public sealed class OrganizationReportsService : IOrganizationReportsService
             {
                 Key = "interview",
                 Label = "Interview",
-                Count = demoInterview,
-                IsDemo = true
+                Count = interviewCount
             },
             new()
             {
                 Key = "offer",
                 Label = "Offer",
-                Count = demoOffer,
-                IsDemo = true
+                Count = offerCount
             },
             new()
             {
                 Key = "hired",
                 Label = "Hired",
-                Count = demoHired,
-                IsDemo = true
+                Count = hiredCount
             },
             new()
             {
@@ -337,6 +367,8 @@ public sealed class OrganizationReportsService : IOrganizationReportsService
                     employee.Id);
                 var applicationCount =
                     applicationCountByEmployee.GetValueOrDefault(employee.Id);
+                var employeeHiredCount =
+                    hiredCountByEmployee.GetValueOrDefault(employee.Id);
 
                 return new ReportsTeamMemberDto
                 {
@@ -348,8 +380,8 @@ public sealed class OrganizationReportsService : IOrganizationReportsService
                         : NormalizeRole(membership?.Role),
                     VacancyCount = vacancyCount,
                     ApplicationCount = applicationCount,
-                    HiredCount = DemoHiredCount(applicationCount),
-                    HiredCountIsDemo = true
+                    HiredCount = employeeHiredCount,
+                    HiredCountIsDemo = false
                 };
             })
             .OrderByDescending(employee => employee.ApplicationCount)
@@ -358,6 +390,13 @@ public sealed class OrganizationReportsService : IOrganizationReportsService
             .ToList();
 
         var now = DateTime.UtcNow;
+        var firstHireByVacancy = hiredApplications
+            .Where(application => application.HiredAtUtc.HasValue)
+            .GroupBy(application => application.VacancyId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Min(application =>
+                    application.HiredAtUtc!.Value));
         var vacancyTimings = vacancies
             .OrderByDescending(vacancy => vacancy.CreatedAtUtc)
             .Select(vacancy =>
@@ -368,6 +407,16 @@ public sealed class OrganizationReportsService : IOrganizationReportsService
                 var daysOpen = Math.Max(
                     0,
                     (int)Math.Ceiling((end - vacancy.CreatedAtUtc).TotalDays));
+                var hasHire = firstHireByVacancy.TryGetValue(
+                    vacancy.Id,
+                    out var firstHireAtUtc);
+                var timeToHireDays = hasHire
+                    ? Math.Max(
+                        0,
+                        (int)Math.Ceiling(
+                            (firstHireAtUtc - vacancy.CreatedAtUtc)
+                            .TotalDays))
+                    : 0;
 
                 return new ReportsVacancyTimingDto
                 {
@@ -377,11 +426,24 @@ public sealed class OrganizationReportsService : IOrganizationReportsService
                     Status = vacancy.Status,
                     CreatedAtUtc = vacancy.CreatedAtUtc,
                     DaysOpen = daysOpen,
-                    TimeToHireDays = DemoTimeToHireDays(vacancy.Id),
-                    TimeToHireIsDemo = true
+                    TimeToHireDays = timeToHireDays,
+                    TimeToHireIsDemo = false
                 };
             })
             .ToList();
+
+        var realTimeToHireDays = hiredApplications
+            .Where(application => application.HiredAtUtc.HasValue)
+            .Select(application => Math.Max(
+                0d,
+                (application.HiredAtUtc!.Value
+                    - application.AppliedAtUtc).TotalDays))
+            .ToList();
+        var averageTimeToHireDays = realTimeToHireDays.Count == 0
+            ? 0
+            : (int)Math.Round(
+                realTimeToHireDays.Average(),
+                MidpointRounding.AwayFromZero);
 
         return new OrganizationAnalyticsDashboardResponse
         {
@@ -393,11 +455,11 @@ public sealed class OrganizationReportsService : IOrganizationReportsService
             GeneratedAtUtc = now,
             ContainsDemoData = true,
             TotalApplications = totalApplications,
-            HiredCount = demoHired,
-            HiredCountIsDemo = true,
+            HiredCount = hiredCount,
+            HiredCountIsDemo = false,
             InProcessApplications = inProcessApplications,
-            AverageTimeToHireDays = 24,
-            AverageTimeToHireIsDemo = true,
+            AverageTimeToHireDays = averageTimeToHireDays,
+            AverageTimeToHireIsDemo = false,
             AcceptedOfferRatePercent = 67m,
             AcceptedOfferRateIsDemo = true,
             ActiveVacancies = vacancies.Count(vacancy =>
@@ -827,33 +889,14 @@ public sealed class OrganizationReportsService : IOrganizationReportsService
                    StringComparison.OrdinalIgnoreCase);
     }
 
-    private static int DemoHiredCount(int applicationCount)
+    private static bool StageNameContains(
+        string? stageName,
+        string expectedValue)
     {
-        return applicationCount <= 0
-            ? 0
-            : Math.Max(
-                1,
-                (int)Math.Round(
-                    applicationCount * 0.18m,
-                    MidpointRounding.AwayFromZero));
-    }
-
-    private static int DemoStageCount(int applicationCount, decimal ratio)
-    {
-        return applicationCount <= 0
-            ? 0
-            : Math.Max(
-                1,
-                Math.Min(
-                    applicationCount,
-                    (int)Math.Round(
-                        applicationCount * ratio,
-                        MidpointRounding.AwayFromZero)));
-    }
-
-    private static int DemoTimeToHireDays(int vacancyId)
-    {
-        return 18 + Math.Abs(vacancyId % 13);
+        return !string.IsNullOrWhiteSpace(stageName)
+            && stageName.Contains(
+                expectedValue,
+                StringComparison.OrdinalIgnoreCase);
     }
 
     private static List<ReportsSourceDto> BuildSources(
@@ -994,8 +1037,12 @@ public sealed class OrganizationReportsService : IOrganizationReportsService
 
     private sealed class ApplicationProjection
     {
+        public int ApplicationId { get; set; }
+        public int VacancyId { get; set; }
         public int EmployerUserId { get; set; }
         public string Status { get; set; } = string.Empty;
+        public string FunnelStageName { get; set; } = string.Empty;
+        public DateTime? HiredAtUtc { get; set; }
         public DateTime AppliedAtUtc { get; set; }
     }
 

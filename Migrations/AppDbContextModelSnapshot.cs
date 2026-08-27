@@ -1203,6 +1203,17 @@ namespace GloryLikeBackend.Migrations
                     b.Property<int>("CandidateUserId")
                         .HasColumnType("int");
 
+                    b.Property<string>("FunnelStageName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("FunnelStageUpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("HiredAtUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -1218,6 +1229,12 @@ namespace GloryLikeBackend.Migrations
 
                     b.HasIndex("CandidateUserId")
                         .HasDatabaseName("IX_VacancyApplications_CandidateUserId");
+
+                    b.HasIndex("HiredAtUtc")
+                        .HasDatabaseName("IX_VacancyApplications_HiredAtUtc");
+
+                    b.HasIndex("VacancyId", "FunnelStageName")
+                        .HasDatabaseName("IX_VacancyApplications_VacancyId_FunnelStageName");
 
                     b.HasIndex("VacancyId", "CandidateUserId")
                         .IsUnique()

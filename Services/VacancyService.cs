@@ -331,6 +331,10 @@ public sealed class VacancyService : IVacancyService
                 group => group.ToList());
 
         var applicants = new List<EmployerVacancyApplicantDto>();
+        var initialFunnelStageName = vacancy.FunnelStages
+            .OrderBy(stage => stage.SortOrder)
+            .Select(stage => stage.StageName)
+            .FirstOrDefault() ?? "Applied";
 
         foreach (var application in vacancy.Applications)
         {
@@ -362,6 +366,13 @@ public sealed class VacancyService : IVacancyService
                     vacancy.JobFamilyName),
                 MatchScore = score,
                 ApplicationStatus = application.Status,
+                FunnelStageName = string.IsNullOrWhiteSpace(
+                    application.FunnelStageName)
+                    ? initialFunnelStageName
+                    : application.FunnelStageName,
+                FunnelStageUpdatedAtUtc =
+                    application.FunnelStageUpdatedAtUtc,
+                HiredAtUtc = application.HiredAtUtc,
                 AppliedAtUtc = application.AppliedAtUtc,
                 MatchedSkills = templateSkills
                     .Where(skill => skill.IsMatched)
@@ -448,6 +459,7 @@ public sealed class VacancyService : IVacancyService
                 .OrderBy(stage => stage.SortOrder)
                 .Select(stage => new EmployerVacancyFunnelStageDto
                 {
+                    StageId = stage.Id,
                     StageName = stage.StageName,
                     Hours = stage.Hours,
                     IsStandard = stage.IsStandard,
@@ -673,6 +685,7 @@ public sealed class VacancyService : IVacancyService
             .AsNoTracking()
             .Include(item => item.ScreeningQuestions)
                 .ThenInclude(question => question.Choices)
+            .Include(item => item.FunnelStages)
             .FirstOrDefaultAsync(
                 item => item.Id == vacancyId,
                 cancellationToken);
@@ -731,6 +744,11 @@ public sealed class VacancyService : IVacancyService
             return ApplyToVacancyResult.Applied(existing, true);
 
         var now = DateTime.UtcNow;
+        var initialFunnelStage = vacancy.FunnelStages
+            .OrderBy(stage => stage.SortOrder)
+            .FirstOrDefault();
+        var initialFunnelStageName = initialFunnelStage?.StageName
+            ?? "Applied";
         var screeningAnswers = BuildScreeningAnswers(
             vacancy.ScreeningQuestions,
             answers ?? Array.Empty<CandidateScreeningAnswerRequest>(),
@@ -753,6 +771,11 @@ public sealed class VacancyService : IVacancyService
             Status = failedScreening
                 ? VacancyApplicationStatuses.ScreeningFailed
                 : VacancyApplicationStatuses.ScreeningPassed,
+            FunnelStageName = initialFunnelStageName,
+            FunnelStageUpdatedAtUtc = now,
+            HiredAtUtc = IsHiredStage(initialFunnelStageName)
+                ? now
+                : null,
             AppliedAtUtc = now,
             UpdatedAtUtc = now,
             ScreeningAnswers = screeningAnswers
@@ -791,6 +814,105 @@ public sealed class VacancyService : IVacancyService
 
             throw;
         }
+    }
+
+    public async Task<MoveApplicantFunnelStageResult>
+        MoveApplicantFunnelStageAsync(
+            int employerUserId,
+            int vacancyId,
+            int applicationId,
+            string stageName,
+            CancellationToken cancellationToken = default)
+    {
+        if (employerUserId <= 0 || vacancyId <= 0 || applicationId <= 0)
+        {
+            return MoveApplicantFunnelStageResult.Invalid(
+                vacancyId,
+                applicationId,
+                "Employer, vacancy and application ID must be valid.");
+        }
+
+        var normalizedStageName = stageName?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(normalizedStageName)
+            || normalizedStageName.Length > 100)
+        {
+            return MoveApplicantFunnelStageResult.Invalid(
+                vacancyId,
+                applicationId,
+                "A valid funnel stage is required.");
+        }
+
+        var access = await _companyAccessService.ResolveAsync(
+            employerUserId,
+            cancellationToken);
+
+        if (access is null)
+        {
+            return MoveApplicantFunnelStageResult.NotFound(
+                vacancyId,
+                applicationId,
+                "You do not have access to this company's vacancies.");
+        }
+
+        var vacancy = await _dbContext.Vacancies
+            .Include(item => item.FunnelStages)
+            .Include(item => item.Applications.Where(application =>
+                application.Id == applicationId))
+            .FirstOrDefaultAsync(
+                item => item.Id == vacancyId
+                    && item.CompanyOwnerUserId
+                        == access.CompanyOwnerUserId,
+                cancellationToken);
+
+        if (vacancy is null)
+        {
+            return MoveApplicantFunnelStageResult.NotFound(
+                vacancyId,
+                applicationId,
+                "Vacancy was not found or does not belong to this company.");
+        }
+
+        var application = vacancy.Applications.SingleOrDefault();
+        if (application is null)
+        {
+            return MoveApplicantFunnelStageResult.NotFound(
+                vacancyId,
+                applicationId,
+                "Application was not found for this vacancy.");
+        }
+
+        var targetStage = vacancy.FunnelStages.FirstOrDefault(stage =>
+            stage.StageName.Equals(
+                normalizedStageName,
+                StringComparison.OrdinalIgnoreCase));
+
+        if (targetStage is null)
+        {
+            return MoveApplicantFunnelStageResult.Invalid(
+                vacancyId,
+                applicationId,
+                "The selected stage does not belong to this vacancy.");
+        }
+
+        var changed = !string.Equals(
+            application.FunnelStageName,
+            targetStage.StageName,
+            StringComparison.OrdinalIgnoreCase);
+
+        if (!changed)
+            return MoveApplicantFunnelStageResult.Moved(application, false);
+
+        var now = DateTime.UtcNow;
+        application.FunnelStageName = targetStage.StageName;
+        application.FunnelStageUpdatedAtUtc = now;
+        application.HiredAtUtc = IsHiredStage(targetStage.StageName)
+            ? now
+            : null;
+        application.UpdatedAtUtc = now;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return MoveApplicantFunnelStageResult.Moved(application, true);
     }
 
     private static List<VacancyScreeningAnswer> BuildScreeningAnswers(
@@ -1286,6 +1408,7 @@ public sealed class VacancyService : IVacancyService
             .Include(item => item.ScreeningQuestions)
                 .ThenInclude(question => question.Choices)
             .Include(item => item.FunnelStages)
+            .Include(item => item.Applications)
             .Include(item => item.PublicationChannels)
             .FirstOrDefaultAsync(
                 item =>
@@ -2348,6 +2471,8 @@ public sealed class VacancyService : IVacancyService
         CreateVacancyPayload payload,
         IReadOnlyDictionary<int, Skill> skillsById)
     {
+        ReconcileApplicationFunnelStages(vacancy, payload);
+
         _dbContext.VacancySkillRequirements.RemoveRange(
             vacancy.SkillRequirements);
         _dbContext.VacancyBenefits.RemoveRange(vacancy.Benefits);
@@ -2375,6 +2500,56 @@ public sealed class VacancyService : IVacancyService
         AddScreeningQuestions(vacancy, payload);
         AddFunnelStages(vacancy, payload);
         AddPublicationChannels(vacancy, payload);
+    }
+
+    private static void ReconcileApplicationFunnelStages(
+        Vacancy vacancy,
+        CreateVacancyPayload payload)
+    {
+        if (vacancy.Applications.Count == 0)
+            return;
+
+        var canonicalStageNames = payload.FunnelStages
+            .ToDictionary(
+                stage => stage.StageName,
+                stage => stage.StageName,
+                StringComparer.OrdinalIgnoreCase);
+        var fallbackStageName = payload.FunnelStages[0].StageName;
+        var now = DateTime.UtcNow;
+
+        foreach (var application in vacancy.Applications)
+        {
+            var currentStage = application.FunnelStageName?.Trim()
+                ?? string.Empty;
+            var nextStageName = canonicalStageNames.TryGetValue(
+                currentStage,
+                out var canonicalName)
+                ? canonicalName
+                : fallbackStageName;
+
+            if (string.Equals(
+                application.FunnelStageName,
+                nextStageName,
+                StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            application.FunnelStageName = nextStageName;
+            application.FunnelStageUpdatedAtUtc = now;
+            application.HiredAtUtc = IsHiredStage(nextStageName)
+                ? application.HiredAtUtc ?? now
+                : null;
+            application.UpdatedAtUtc = now;
+        }
+    }
+
+    private static bool IsHiredStage(string? stageName)
+    {
+        return string.Equals(
+            stageName?.Trim(),
+            "Hired",
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private static void AddSkillRequirements(
