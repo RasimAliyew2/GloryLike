@@ -20,6 +20,10 @@ public interface IMicrosoftCalendarService
         int employerUserId,
         CancellationToken cancellationToken = default);
 
+    Task<InterviewAvailabilityResponse> GetAvailabilityAsync(
+        InterviewAvailabilityRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<CreateInterviewMeetingResponse> CreateMeetingAsync(
         CreateInterviewMeetingRequest request,
         CancellationToken cancellationToken = default);

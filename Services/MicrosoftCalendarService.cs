@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using GloryLikeBackend.Data;
@@ -129,9 +130,11 @@ public sealed class MicrosoftCalendarService : IMicrosoftCalendarService
             token = await ExchangeAuthorizationCodeAsync(request, cancellationToken);
         }
         catch (Exception exception) when (
-            exception is HttpRequestException
-            or InvalidOperationException
-            or JsonException)
+            (exception is HttpRequestException
+                or InvalidOperationException
+                or JsonException)
+            || (exception is TaskCanceledException
+                && !cancellationToken.IsCancellationRequested))
         {
             _logger.LogWarning(
                 exception,
@@ -152,7 +155,9 @@ public sealed class MicrosoftCalendarService : IMicrosoftCalendarService
             profile = await GetProfileAsync(token.AccessToken, cancellationToken);
         }
         catch (Exception exception) when (
-            exception is HttpRequestException or JsonException)
+            (exception is HttpRequestException or JsonException)
+            || (exception is TaskCanceledException
+                && !cancellationToken.IsCancellationRequested))
         {
             _logger.LogWarning(
                 exception,
@@ -274,6 +279,128 @@ public sealed class MicrosoftCalendarService : IMicrosoftCalendarService
         };
     }
 
+    public async Task<InterviewAvailabilityResponse> GetAvailabilityAsync(
+        InterviewAvailabilityRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request.EmployerUserId <= 0
+            || request.VacancyId <= 0
+            || request.ApplicationId <= 0)
+        {
+            return AvailabilityFailure(
+                "Availability sorğusunda employer, vacancy və application düzgün deyil.");
+        }
+
+        var rangeStartUtc = request.RangeStartUtc.UtcDateTime;
+        var rangeEndUtc = request.RangeEndUtc.UtcDateTime;
+        if (rangeEndUtc <= rangeStartUtc
+            || rangeEndUtc - rangeStartUtc > TimeSpan.FromDays(14))
+        {
+            return AvailabilityFailure(
+                "Calendar intervalı düzgün deyil və maksimum 14 gün ola bilər.");
+        }
+
+        var access = await _companyAccessService.ResolveAsync(
+            request.EmployerUserId,
+            cancellationToken);
+        if (access is null)
+            return AvailabilityFailure("Employer hesabı tapılmadı və ya aktiv deyil.");
+
+        var application = await _dbContext.VacancyApplications
+            .AsNoTracking()
+            .Include(item => item.Vacancy)
+            .SingleOrDefaultAsync(
+                item => item.Id == request.ApplicationId
+                    && item.VacancyId == request.VacancyId
+                    && item.Vacancy.CompanyOwnerUserId == access.CompanyOwnerUserId,
+                cancellationToken);
+        if (application is null)
+            return AvailabilityFailure("Application tapılmadı və ya bu şirkətə aid deyil.");
+
+        var candidate = await _dbContext.Users
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                item => item.Id == application.CandidateUserId,
+                cancellationToken);
+        if (candidate is null || string.IsNullOrWhiteSpace(candidate.Email))
+            return AvailabilityFailure("Namizədin email ünvanı tapılmadı.");
+
+        var connection = await _dbContext.MicrosoftCalendarConnections
+            .SingleOrDefaultAsync(
+                item => item.UserId == request.EmployerUserId,
+                cancellationToken);
+        if (connection is null)
+            return AvailabilityFailure("Əvvəl Outlook calendar hesabınızı qoşun.");
+
+        string accessToken;
+        try
+        {
+            accessToken = await GetValidAccessTokenAsync(
+                connection,
+                cancellationToken);
+        }
+        catch (Exception exception) when (
+            (exception is HttpRequestException
+                or InvalidOperationException
+                or JsonException)
+            || (exception is TaskCanceledException
+                && !cancellationToken.IsCancellationRequested))
+        {
+            _logger.LogWarning(
+                exception,
+                "Employer {EmployerUserId} availability üçün Microsoft token almadı.",
+                request.EmployerUserId);
+            return AvailabilityFailure(
+                "Outlook bağlantısının müddəti bitib. Hesabı ayırıb yenidən qoşun.");
+        }
+
+        List<CalendarBusySlotResponse> organizerSlots;
+        try
+        {
+            organizerSlots = await GetOrganizerBusySlotsAsync(
+                accessToken,
+                rangeStartUtc,
+                rangeEndUtc,
+                cancellationToken);
+        }
+        catch (Exception exception) when (
+            (exception is HttpRequestException or JsonException)
+            || (exception is TaskCanceledException
+                && !cancellationToken.IsCancellationRequested))
+        {
+            _logger.LogWarning(
+                exception,
+                "Employer {EmployerUserId} Outlook calendar view alınmadı.",
+                request.EmployerUserId);
+            return AvailabilityFailure(
+                "HR-ın Outlook calendar məlumatı oxunmadı. Yenidən cəhd edin.");
+        }
+
+        var candidateAvailability = await GetCandidateBusySlotsAsync(
+            accessToken,
+            candidate.Email.Trim(),
+            rangeStartUtc,
+            rangeEndUtc,
+            cancellationToken);
+        var candidateName = GetDisplayName(candidate);
+
+        return new InterviewAvailabilityResponse
+        {
+            Success = true,
+            Message = "Outlook availability yükləndi.",
+            OrganizerEmail = connection.Email,
+            CandidateEmail = candidate.Email.Trim(),
+            CandidateName = candidateName,
+            CandidateAvailabilityAvailable = candidateAvailability.IsAvailable,
+            CandidateAvailabilityMessage = candidateAvailability.Message,
+            BusySlots = organizerSlots
+                .Concat(candidateAvailability.BusySlots)
+                .OrderBy(item => item.StartAtUtc)
+                .ThenBy(item => item.Source)
+                .ToList()
+        };
+    }
+
     public async Task<CreateInterviewMeetingResponse> CreateMeetingAsync(
         CreateInterviewMeetingRequest request,
         CancellationToken cancellationToken = default)
@@ -329,9 +456,11 @@ public sealed class MicrosoftCalendarService : IMicrosoftCalendarService
             accessToken = await GetValidAccessTokenAsync(connection, cancellationToken);
         }
         catch (Exception exception) when (
-            exception is HttpRequestException
-            or InvalidOperationException
-            or JsonException)
+            (exception is HttpRequestException
+                or InvalidOperationException
+                or JsonException)
+            || (exception is TaskCanceledException
+                && !cancellationToken.IsCancellationRequested))
         {
             _logger.LogWarning(
                 exception,
@@ -346,12 +475,59 @@ public sealed class MicrosoftCalendarService : IMicrosoftCalendarService
         if (subject.Length > 240)
             return MeetingFailure("Meeting mövzusu maksimum 240 simvol ola bilər.");
         var endUtc = startUtc.AddMinutes(request.DurationMinutes);
+
+        try
+        {
+            var organizerSlots = await GetOrganizerBusySlotsAsync(
+                accessToken,
+                startUtc,
+                endUtc,
+                cancellationToken);
+            if (organizerSlots.Any(slot => Overlaps(
+                    slot.StartAtUtc,
+                    slot.EndAtUtc,
+                    startUtc,
+                    endUtc)))
+            {
+                return MeetingFailure(
+                    "Seçilən vaxt HR-ın Outlook calendar-ındakı başqa tədbirlə üst-üstə düşür.");
+            }
+        }
+        catch (Exception exception) when (
+            (exception is HttpRequestException or JsonException)
+            || (exception is TaskCanceledException
+                && !cancellationToken.IsCancellationRequested))
+        {
+            _logger.LogWarning(
+                exception,
+                "Meeting-dən əvvəl employer {EmployerUserId} calendar konflikti yoxlanmadı.",
+                request.EmployerUserId);
+            return MeetingFailure(
+                "HR calendar konflikti yoxlanmadığı üçün meeting yaradılmadı. Yenidən cəhd edin.");
+        }
+
+        var candidateAvailability = await GetCandidateBusySlotsAsync(
+            accessToken,
+            candidate.Email.Trim(),
+            startUtc,
+            endUtc,
+            cancellationToken);
+        if (candidateAvailability.IsAvailable
+            && candidateAvailability.BusySlots.Any(slot => Overlaps(
+                slot.StartAtUtc,
+                slot.EndAtUtc,
+                startUtc,
+                endUtc)))
+        {
+            return MeetingFailure(
+                "Seçilən vaxt namizədin Outlook calendar-ında busy görünür.");
+        }
+
         var transactionId = Guid.NewGuid().ToString();
         var vacancyTitle = string.IsNullOrWhiteSpace(application.Vacancy.RoleTitle)
             ? application.Vacancy.PositionName
             : application.Vacancy.RoleTitle;
-        var candidateName = string.Join(' ', new[] { candidate.Name, candidate.Surname }
-            .Where(value => !string.IsNullOrWhiteSpace(value)));
+        var candidateName = GetDisplayName(candidate);
         var body = BuildMeetingBody(
             request.Agenda,
             vacancyTitle,
@@ -468,7 +644,9 @@ public sealed class MicrosoftCalendarService : IMicrosoftCalendarService
         return new CreateInterviewMeetingResponse
         {
             Success = true,
-            Message = $"Meeting yaradıldı və dəvət {candidate.Email}-a göndərildi.",
+            Message = candidateAvailability.IsAvailable
+                ? $"Meeting yaradıldı və dəvət {candidate.Email}-a göndərildi."
+                : $"Meeting yaradıldı və dəvət {candidate.Email}-a göndərildi. Namizədin external calendar availability-si Microsoft tərəfindən təqdim edilmədi.",
             MeetingId = meeting.Id,
             CandidateEmail = meeting.CandidateEmail,
             OrganizerEmail = connection.Email,
@@ -477,6 +655,299 @@ public sealed class MicrosoftCalendarService : IMicrosoftCalendarService
             WebLink = meeting.WebLink,
             JoinUrl = meeting.JoinUrl
         };
+    }
+
+    private async Task<List<CalendarBusySlotResponse>> GetOrganizerBusySlotsAsync(
+        string accessToken,
+        DateTime rangeStartUtc,
+        DateTime rangeEndUtc,
+        CancellationToken cancellationToken)
+    {
+        var slots = new List<CalendarBusySlotResponse>();
+        string? nextUrl =
+            "https://graph.microsoft.com/v1.0/me/calendarView"
+            + $"?startDateTime={Uri.EscapeDataString(rangeStartUtc.ToString("O", CultureInfo.InvariantCulture))}"
+            + $"&endDateTime={Uri.EscapeDataString(rangeEndUtc.ToString("O", CultureInfo.InvariantCulture))}"
+            + "&$select=subject,start,end,isAllDay,isCancelled,showAs"
+            + "&$orderby=start/dateTime&$top=250";
+        var pageCount = 0;
+
+        while (!string.IsNullOrWhiteSpace(nextUrl) && pageCount < 10)
+        {
+            pageCount++;
+            using var request = new HttpRequestMessage(HttpMethod.Get, nextUrl);
+            request.Headers.Authorization = new AuthenticationHeaderValue(
+                "Bearer",
+                accessToken);
+            request.Headers.TryAddWithoutValidation(
+                "Prefer",
+                "outlook.timezone=\"UTC\"");
+            using var response = await _httpClient.SendAsync(
+                request,
+                cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException(
+                    $"Microsoft calendarView HTTP {(int)response.StatusCode}: {Truncate(body, 600)}");
+            }
+
+            var page = JsonSerializer.Deserialize<GraphCalendarViewResponse>(
+                body,
+                JsonOptions)
+                ?? throw new JsonException("Microsoft calendarView response boşdur.");
+
+            foreach (var item in page.Value)
+            {
+                if (item.IsCancelled || !IsBusyStatus(item.ShowAs))
+                    continue;
+                if (!TryParseGraphUtc(item.Start, out var startUtc)
+                    || !TryParseGraphUtc(item.End, out var endUtc)
+                    || endUtc <= startUtc)
+                {
+                    continue;
+                }
+
+                startUtc = startUtc < rangeStartUtc ? rangeStartUtc : startUtc;
+                endUtc = endUtc > rangeEndUtc ? rangeEndUtc : endUtc;
+                if (endUtc <= startUtc)
+                    continue;
+
+                slots.Add(new CalendarBusySlotResponse
+                {
+                    Source = "organizer",
+                    Title = string.IsNullOrWhiteSpace(item.Subject)
+                        ? "Busy"
+                        : item.Subject.Trim(),
+                    StartAtUtc = startUtc,
+                    EndAtUtc = endUtc,
+                    IsAllDay = item.IsAllDay,
+                    Status = string.IsNullOrWhiteSpace(item.ShowAs)
+                        ? "busy"
+                        : item.ShowAs
+                });
+            }
+
+            nextUrl = page.NextLink;
+        }
+
+        return slots;
+    }
+
+    private async Task<CandidateAvailabilityResult> GetCandidateBusySlotsAsync(
+        string accessToken,
+        string candidateEmail,
+        DateTime rangeStartUtc,
+        DateTime rangeEndUtc,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var payload = new
+            {
+                schedules = new[] { candidateEmail },
+                startTime = new
+                {
+                    dateTime = rangeStartUtc.ToString(
+                        "yyyy-MM-dd'T'HH:mm:ss",
+                        CultureInfo.InvariantCulture),
+                    timeZone = "UTC"
+                },
+                endTime = new
+                {
+                    dateTime = rangeEndUtc.ToString(
+                        "yyyy-MM-dd'T'HH:mm:ss",
+                        CultureInfo.InvariantCulture),
+                    timeZone = "UTC"
+                },
+                availabilityViewInterval = 15
+            };
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post,
+                "https://graph.microsoft.com/v1.0/me/calendar/getSchedule");
+            request.Headers.Authorization = new AuthenticationHeaderValue(
+                "Bearer",
+                accessToken);
+            request.Headers.TryAddWithoutValidation(
+                "Prefer",
+                "outlook.timezone=\"UTC\"");
+            request.Content = JsonContent.Create(payload, options: JsonOptions);
+            using var response = await _httpClient.SendAsync(
+                request,
+                cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation(
+                    "Candidate {CandidateEmail} getSchedule unavailable. HTTP {StatusCode}. Body: {Body}",
+                    candidateEmail,
+                    (int)response.StatusCode,
+                    Truncate(body, 600));
+                return CandidateAvailabilityResult.Unavailable(
+                    "Namizədin free/busy məlumatı Microsoft tərəfindən paylaşılmır. HR calendar-ı tam yoxlanır.");
+            }
+
+            var graphResult = JsonSerializer.Deserialize<GraphScheduleResponse>(
+                body,
+                JsonOptions);
+            var schedule = graphResult?.Value.FirstOrDefault();
+            if (schedule is null || schedule.Error is not null)
+            {
+                return CandidateAvailabilityResult.Unavailable(
+                    "Namizədin Outlook availability məlumatına giriş yoxdur. HR calendar-ı tam yoxlanır.");
+            }
+
+            var slots = new List<CalendarBusySlotResponse>();
+            foreach (var item in schedule.ScheduleItems)
+            {
+                if (!IsBusyStatus(item.Status)
+                    || !TryParseGraphUtc(item.Start, out var startUtc)
+                    || !TryParseGraphUtc(item.End, out var endUtc)
+                    || endUtc <= startUtc)
+                {
+                    continue;
+                }
+
+                startUtc = startUtc < rangeStartUtc ? rangeStartUtc : startUtc;
+                endUtc = endUtc > rangeEndUtc ? rangeEndUtc : endUtc;
+                if (endUtc <= startUtc)
+                    continue;
+
+                slots.Add(CreateCandidateBusySlot(
+                    startUtc,
+                    endUtc,
+                    item.Status));
+            }
+
+            if (slots.Count == 0
+                && !string.IsNullOrWhiteSpace(schedule.AvailabilityView))
+            {
+                slots.AddRange(BuildCandidateSlotsFromAvailabilityView(
+                    schedule.AvailabilityView,
+                    rangeStartUtc,
+                    rangeEndUtc));
+            }
+
+            return CandidateAvailabilityResult.Available(slots);
+        }
+        catch (Exception exception) when (
+            (exception is HttpRequestException or JsonException)
+            || (exception is TaskCanceledException
+                && !cancellationToken.IsCancellationRequested))
+        {
+            _logger.LogInformation(
+                exception,
+                "Candidate {CandidateEmail} availability alınmadı.",
+                candidateEmail);
+            return CandidateAvailabilityResult.Unavailable(
+                "Namizədin Outlook availability məlumatı hazırda əlçatan deyil. HR calendar-ı tam yoxlanır.");
+        }
+    }
+
+    private static IEnumerable<CalendarBusySlotResponse>
+        BuildCandidateSlotsFromAvailabilityView(
+            string availabilityView,
+            DateTime rangeStartUtc,
+            DateTime rangeEndUtc)
+    {
+        const int intervalMinutes = 15;
+        var result = new List<CalendarBusySlotResponse>();
+        var index = 0;
+        while (index < availabilityView.Length)
+        {
+            if (!IsBusyAvailabilityCode(availabilityView[index]))
+            {
+                index++;
+                continue;
+            }
+
+            var startIndex = index;
+            var statusCode = availabilityView[index];
+            while (index < availabilityView.Length
+                && IsBusyAvailabilityCode(availabilityView[index]))
+            {
+                index++;
+            }
+
+            var startUtc = rangeStartUtc.AddMinutes(
+                startIndex * intervalMinutes);
+            var endUtc = rangeStartUtc.AddMinutes(index * intervalMinutes);
+            if (endUtc > rangeEndUtc)
+                endUtc = rangeEndUtc;
+            if (endUtc > startUtc)
+            {
+                result.Add(CreateCandidateBusySlot(
+                    startUtc,
+                    endUtc,
+                    statusCode switch
+                    {
+                        '1' => "tentative",
+                        '3' => "oof",
+                        _ => "busy"
+                    }));
+            }
+        }
+
+        return result;
+    }
+
+    private static CalendarBusySlotResponse CreateCandidateBusySlot(
+        DateTime startUtc,
+        DateTime endUtc,
+        string status) =>
+        new()
+        {
+            Source = "candidate",
+            Title = "Candidate busy",
+            StartAtUtc = startUtc,
+            EndAtUtc = endUtc,
+            IsAllDay = endUtc - startUtc >= TimeSpan.FromHours(23),
+            Status = string.IsNullOrWhiteSpace(status) ? "busy" : status
+        };
+
+    private static bool TryParseGraphUtc(
+        GraphDateTimeTimeZone? value,
+        out DateTime utcValue)
+    {
+        utcValue = default;
+        if (value is null || string.IsNullOrWhiteSpace(value.DateTime))
+            return false;
+
+        if (!DateTimeOffset.TryParse(
+                value.DateTime,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out var parsed))
+        {
+            return false;
+        }
+
+        utcValue = parsed.UtcDateTime;
+        return true;
+    }
+
+    private static bool IsBusyStatus(string? status) =>
+        !string.Equals(status, "free", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(
+            status,
+            "workingElsewhere",
+            StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsBusyAvailabilityCode(char value) =>
+        value is '1' or '2' or '3';
+
+    private static bool Overlaps(
+        DateTime firstStart,
+        DateTime firstEnd,
+        DateTime secondStart,
+        DateTime secondEnd) =>
+        firstStart < secondEnd && secondStart < firstEnd;
+
+    private static string GetDisplayName(User user)
+    {
+        var name = string.Join(' ', new[] { user.Name, user.Surname }
+            .Where(value => !string.IsNullOrWhiteSpace(value)));
+        return string.IsNullOrWhiteSpace(name) ? user.Email : name;
     }
 
     private async Task<TokenResponse> ExchangeAuthorizationCodeAsync(
@@ -628,6 +1099,10 @@ public sealed class MicrosoftCalendarService : IMicrosoftCalendarService
     private static CreateInterviewMeetingResponse MeetingFailure(string message) =>
         new() { Success = false, Message = message };
 
+    private static InterviewAvailabilityResponse AvailabilityFailure(
+        string message) =>
+        new() { Success = false, Message = message };
+
     private static string Truncate(string value, int maxLength) =>
         value.Length <= maxLength ? value : value[..maxLength];
 
@@ -652,6 +1127,79 @@ public sealed class MicrosoftCalendarService : IMicrosoftCalendarService
         public string? DisplayName { get; set; }
         public string? Mail { get; set; }
         public string? UserPrincipalName { get; set; }
+    }
+
+    private sealed class GraphCalendarViewResponse
+    {
+        public List<GraphCalendarEvent> Value { get; set; } = new();
+
+        [JsonPropertyName("@odata.nextLink")]
+        public string? NextLink { get; set; }
+    }
+
+    private sealed class GraphCalendarEvent
+    {
+        public string? Subject { get; set; }
+        public GraphDateTimeTimeZone? Start { get; set; }
+        public GraphDateTimeTimeZone? End { get; set; }
+        public bool IsAllDay { get; set; }
+        public bool IsCancelled { get; set; }
+        public string? ShowAs { get; set; }
+    }
+
+    private sealed class GraphScheduleResponse
+    {
+        public List<GraphScheduleInformation> Value { get; set; } = new();
+    }
+
+    private sealed class GraphScheduleInformation
+    {
+        public string? ScheduleId { get; set; }
+        public string? AvailabilityView { get; set; }
+        public List<GraphScheduleItem> ScheduleItems { get; set; } = new();
+        public GraphScheduleError? Error { get; set; }
+    }
+
+    private sealed class GraphScheduleItem
+    {
+        public string Status { get; set; } = string.Empty;
+        public GraphDateTimeTimeZone? Start { get; set; }
+        public GraphDateTimeTimeZone? End { get; set; }
+    }
+
+    private sealed class GraphScheduleError
+    {
+        public string? Code { get; set; }
+        public string? Message { get; set; }
+    }
+
+    private sealed class GraphDateTimeTimeZone
+    {
+        public string DateTime { get; set; } = string.Empty;
+        public string? TimeZone { get; set; }
+    }
+
+    private sealed class CandidateAvailabilityResult
+    {
+        public bool IsAvailable { get; private init; }
+        public string Message { get; private init; } = string.Empty;
+        public List<CalendarBusySlotResponse> BusySlots { get; private init; } = new();
+
+        public static CandidateAvailabilityResult Available(
+            List<CalendarBusySlotResponse> slots) =>
+            new()
+            {
+                IsAvailable = true,
+                Message = "Namizədin Outlook free/busy məlumatı göstərilir.",
+                BusySlots = slots
+            };
+
+        public static CandidateAvailabilityResult Unavailable(string message) =>
+            new()
+            {
+                IsAvailable = false,
+                Message = message
+            };
     }
 
     private sealed class GraphEvent

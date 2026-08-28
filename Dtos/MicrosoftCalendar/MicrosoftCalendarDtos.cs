@@ -34,6 +34,37 @@ public sealed class MicrosoftCalendarConnectionStatusResponse
     public DateTime? ConnectedAtUtc { get; set; }
 }
 
+public sealed class InterviewAvailabilityRequest
+{
+    public int EmployerUserId { get; set; }
+    public int VacancyId { get; set; }
+    public int ApplicationId { get; set; }
+    public DateTimeOffset RangeStartUtc { get; set; }
+    public DateTimeOffset RangeEndUtc { get; set; }
+}
+
+public sealed class InterviewAvailabilityResponse
+{
+    public bool Success { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public string OrganizerEmail { get; set; } = string.Empty;
+    public string CandidateEmail { get; set; } = string.Empty;
+    public string CandidateName { get; set; } = string.Empty;
+    public bool CandidateAvailabilityAvailable { get; set; }
+    public string CandidateAvailabilityMessage { get; set; } = string.Empty;
+    public List<CalendarBusySlotResponse> BusySlots { get; set; } = new();
+}
+
+public sealed class CalendarBusySlotResponse
+{
+    public string Source { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public DateTime StartAtUtc { get; set; }
+    public DateTime EndAtUtc { get; set; }
+    public bool IsAllDay { get; set; }
+    public string Status { get; set; } = string.Empty;
+}
+
 public sealed class CreateInterviewMeetingRequest
 {
     public int EmployerUserId { get; set; }

@@ -88,6 +88,20 @@ public sealed class MicrosoftCalendarController : ControllerBase
         return response.Success ? Ok(response) : BadRequest(response);
     }
 
+    [HttpPost("availability")]
+    public async Task<ActionResult<InterviewAvailabilityResponse>> Availability(
+        [FromBody] InterviewAvailabilityRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!IsTrustedWebApp())
+            return Unauthorized(FailureAvailability());
+
+        var response = await _calendarService.GetAvailabilityAsync(
+            request,
+            cancellationToken);
+        return response.Success ? Ok(response) : BadRequest(response);
+    }
+
     [HttpPost("meetings")]
     public async Task<ActionResult<CreateInterviewMeetingResponse>>
         CreateMeeting(
@@ -140,6 +154,13 @@ public sealed class MicrosoftCalendarController : ControllerBase
         };
 
     private static CreateInterviewMeetingResponse FailureMeeting() =>
+        new()
+        {
+            Success = false,
+            Message = "Microsoft Calendar WebApp authorization failed."
+        };
+
+    private static InterviewAvailabilityResponse FailureAvailability() =>
         new()
         {
             Success = false,
