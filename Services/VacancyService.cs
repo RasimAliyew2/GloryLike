@@ -360,6 +360,7 @@ public sealed class VacancyService : IVacancyService
                     out var candidate)
                     ? BuildCandidateDisplayName(candidate)
                     : $"Candidate #{application.CandidateUserId}",
+                CandidateEmail = candidate?.Email ?? string.Empty,
                 CurrentRole = ResolveCandidateRole(
                     skills,
                     vacancy.JobFamilyId,

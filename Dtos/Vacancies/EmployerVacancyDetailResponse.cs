@@ -46,6 +46,7 @@ public sealed class EmployerVacancyApplicantDto
     public int ApplicationId { get; set; }
     public int CandidateUserId { get; set; }
     public string CandidateName { get; set; } = string.Empty;
+    public string CandidateEmail { get; set; } = string.Empty;
     public string CurrentRole { get; set; } = string.Empty;
     public int MatchScore { get; set; }
     public string ApplicationStatus { get; set; } = string.Empty;

@@ -2,6 +2,7 @@
 using GloryLikeBackend.Options;
 using GloryLikeBackend.Services;
 using GloryLikeBackend.Services.Interfaces;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,6 +10,16 @@ using Microsoft.EntityFrameworkCore;
 
 
 var builder = WebApplication.CreateBuilder(args);
+
+var dataProtectionKeysDirectory = Path.Combine(
+    builder.Environment.ContentRootPath,
+    "App_Data",
+    "DataProtectionKeys");
+Directory.CreateDirectory(dataProtectionKeysDirectory);
+builder.Services
+    .AddDataProtection()
+    .SetApplicationName("BothFind.GloryLikeBackend")
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysDirectory));
 
 const string frontendCorsPolicy = "FrontendCors";
 
@@ -66,6 +77,7 @@ builder.Services.AddScoped<ICompanyHiringPlanService, CompanyHiringPlanService>(
 builder.Services.AddSingleton<IXlsxTableService, XlsxTableService>();
 builder.Services.AddScoped<ICompanyStructureService, CompanyStructureService>();
 builder.Services.AddScoped<IOrganizationReportsService, OrganizationReportsService>();
+builder.Services.AddHttpClient<IMicrosoftCalendarService, MicrosoftCalendarService>();
 builder.Services.Configure<SmtpOptions>(
     builder.Configuration.GetSection(
         SmtpOptions.SectionName));
@@ -75,6 +87,9 @@ builder.Services.Configure<TeamInvitationOptions>(
 builder.Services.Configure<SocialAuthOptions>(
     builder.Configuration.GetSection(
         SocialAuthOptions.SectionName));
+builder.Services.Configure<MicrosoftCalendarOptions>(
+    builder.Configuration.GetSection(
+        MicrosoftCalendarOptions.SectionName));
 builder.Services.AddScoped<
     IRegistrationEmailSender,
     SmtpRegistrationEmailSender>();

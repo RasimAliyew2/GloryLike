@@ -34,6 +34,14 @@ public class AppDbContext : DbContext
         set;
     }
 
+    public DbSet<MicrosoftCalendarConnection> MicrosoftCalendarConnections
+    {
+        get;
+        set;
+    }
+
+    public DbSet<InterviewMeeting> InterviewMeetings { get; set; }
+
     public DbSet<CompanyProfile> CompanyProfiles { get; set; }
 
     public DbSet<CompanyLocation> CompanyLocations { get; set; }
@@ -240,6 +248,7 @@ public class AppDbContext : DbContext
 
         ConfigureCompanyTeamInvitations(modelBuilder);
         ConfigureCompanyCandidateMessages(modelBuilder);
+        ConfigureMicrosoftCalendar(modelBuilder);
         ConfigureCompanyProfiles(modelBuilder);
         ConfigureCompanyLocations(modelBuilder);
         ConfigureCompanyStructure(modelBuilder);
@@ -360,6 +369,80 @@ public class AppDbContext : DbContext
             entity.HasOne(item => item.Candidate)
                 .WithMany()
                 .HasForeignKey(item => item.CandidateUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigureMicrosoftCalendar(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<MicrosoftCalendarConnection>(entity =>
+        {
+            entity.ToTable("MicrosoftCalendarConnections");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.MicrosoftUserId)
+                .HasMaxLength(200)
+                .IsRequired();
+            entity.Property(item => item.TenantId)
+                .HasMaxLength(100)
+                .IsRequired();
+            entity.Property(item => item.Email)
+                .HasMaxLength(320)
+                .IsRequired();
+            entity.Property(item => item.DisplayName)
+                .HasMaxLength(200);
+            entity.Property(item => item.ProtectedAccessToken)
+                .HasColumnType("nvarchar(max)")
+                .IsRequired();
+            entity.Property(item => item.ProtectedRefreshToken)
+                .HasColumnType("nvarchar(max)")
+                .IsRequired();
+            entity.Property(item => item.GrantedScopes)
+                .HasMaxLength(1000);
+            entity.HasIndex(item => item.UserId)
+                .IsUnique()
+                .HasDatabaseName("UX_MicrosoftCalendarConnections_UserId");
+            entity.HasOne(item => item.User)
+                .WithMany()
+                .HasForeignKey(item => item.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<InterviewMeeting>(entity =>
+        {
+            entity.ToTable("InterviewMeetings");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Subject)
+                .HasMaxLength(240)
+                .IsRequired();
+            entity.Property(item => item.CandidateEmail)
+                .HasMaxLength(320)
+                .IsRequired();
+            entity.Property(item => item.GraphEventId)
+                .HasMaxLength(500)
+                .IsRequired();
+            entity.Property(item => item.WebLink)
+                .HasMaxLength(2000);
+            entity.Property(item => item.JoinUrl)
+                .HasMaxLength(2000);
+            entity.Property(item => item.TransactionId)
+                .HasMaxLength(64)
+                .IsRequired();
+            entity.HasIndex(item => item.TransactionId)
+                .IsUnique()
+                .HasDatabaseName("UX_InterviewMeetings_TransactionId");
+            entity.HasIndex(item => new
+                {
+                    item.VacancyApplicationId,
+                    item.StartAtUtc
+                })
+                .HasDatabaseName("IX_InterviewMeetings_Application_StartAtUtc");
+            entity.HasOne(item => item.VacancyApplication)
+                .WithMany()
+                .HasForeignKey(item => item.VacancyApplicationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.OrganizerUser)
+                .WithMany()
+                .HasForeignKey(item => item.OrganizerUserId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }
