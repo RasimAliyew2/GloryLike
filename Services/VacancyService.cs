@@ -223,7 +223,10 @@ public sealed class VacancyService : IVacancyService
                 HasApplied = application is not null,
                 ApplicationId = application?.Id,
                 ApplicationStatus = application?.Status ?? string.Empty,
-                AppliedAtUtc = application?.AppliedAtUtc
+                AppliedAtUtc = application?.AppliedAtUtc,
+                FunnelStageName = application?.FunnelStageName ?? string.Empty,
+                FunnelStageUpdatedAtUtc =
+                    application?.FunnelStageUpdatedAtUtc
             });
         }
 
@@ -232,6 +235,201 @@ public sealed class VacancyService : IVacancyService
             : $"{response.Vacancies.Count} uyğun vacancy tapıldı.";
 
         return response;
+    }
+
+    public async Task<CandidateApplicationListResponse?>
+        GetCandidateApplicationsAsync(
+            int candidateUserId,
+            CancellationToken cancellationToken = default)
+    {
+        var candidateExists = await _dbContext.Users
+            .AsNoTracking()
+            .AnyAsync(
+                user => user.Id == candidateUserId
+                    && user.AccountType == "candidate",
+                cancellationToken);
+
+        if (!candidateExists)
+            return null;
+
+        var applications = await _dbContext.VacancyApplications
+            .AsNoTracking()
+            .Include(application => application.Vacancy)
+                .ThenInclude(vacancy => vacancy.FunnelStages)
+            .Where(application =>
+                application.CandidateUserId == candidateUserId)
+            .OrderByDescending(application => application.AppliedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        var ownerIds = applications
+            .Select(application => application.Vacancy.CompanyOwnerUserId)
+            .Distinct()
+            .ToList();
+
+        var companyNames = await _dbContext.CompanyProfiles
+            .AsNoTracking()
+            .Where(profile => ownerIds.Contains(profile.OwnerUserId))
+            .ToDictionaryAsync(
+                profile => profile.OwnerUserId,
+                profile => profile.CompanyName,
+                cancellationToken);
+
+        var owners = await _dbContext.Users
+            .AsNoTracking()
+            .Where(user => ownerIds.Contains(user.Id))
+            .ToDictionaryAsync(user => user.Id, cancellationToken);
+
+        var response = new CandidateApplicationListResponse
+        {
+            Success = true,
+            CandidateUserId = candidateUserId
+        };
+
+        foreach (var application in applications)
+        {
+            var vacancy = application.Vacancy;
+            var stages = vacancy.FunnelStages
+                .OrderBy(stage => stage.SortOrder)
+                .ThenBy(stage => stage.Id)
+                .ToList();
+            var currentStage = stages.FindIndex(stage =>
+                stage.StageName.Equals(
+                    application.FunnelStageName,
+                    StringComparison.OrdinalIgnoreCase));
+
+            var stageName = currentStage >= 0
+                ? stages[currentStage].StageName
+                : stages.FirstOrDefault()?.StageName
+                    ?? application.FunnelStageName;
+
+            response.Applications.Add(new CandidateApplicationListItemDto
+            {
+                ApplicationId = application.Id,
+                VacancyId = vacancy.Id,
+                PlatformVacancyId = vacancy.PlatformVacancyId,
+                CompanyName = ResolveApplicationCompanyName(
+                    vacancy,
+                    companyNames,
+                    owners),
+                RoleTitle = vacancy.RoleTitle,
+                PositionName = vacancy.PositionName,
+                LocationName = vacancy.LocationName,
+                EmploymentType = vacancy.EmploymentType,
+                VacancyStatus = vacancy.Status,
+                ApplicationStatus = application.Status,
+                FunnelStageName = stageName,
+                FunnelStageIndex = currentStage >= 0
+                    ? currentStage + 1
+                    : stages.Count > 0 ? 1 : 0,
+                FunnelStageCount = stages.Count,
+                AppliedAtUtc = application.AppliedAtUtc,
+                FunnelStageUpdatedAtUtc =
+                    application.FunnelStageUpdatedAtUtc,
+                HiredAtUtc = application.HiredAtUtc
+            });
+        }
+
+        response.Message = response.Applications.Count == 0
+            ? "Candidate hələ heç bir vacancy-yə apply etməyib."
+            : $"{response.Applications.Count} application tapıldı.";
+
+        return response;
+    }
+
+    public async Task<CandidateNotificationListResponse?>
+        GetCandidateNotificationsAsync(
+            int candidateUserId,
+            CancellationToken cancellationToken = default)
+    {
+        var candidateExists = await _dbContext.Users
+            .AsNoTracking()
+            .AnyAsync(
+                user => user.Id == candidateUserId
+                    && user.AccountType == "candidate",
+                cancellationToken);
+
+        if (!candidateExists)
+            return null;
+
+        var notifications = await _dbContext.CandidateNotifications
+            .AsNoTracking()
+            .Where(notification =>
+                notification.CandidateUserId == candidateUserId)
+            .OrderByDescending(notification => notification.CreatedAtUtc)
+            .Take(30)
+            .ToListAsync(cancellationToken);
+
+        var unreadCount = await _dbContext.CandidateNotifications
+            .AsNoTracking()
+            .CountAsync(
+                notification =>
+                    notification.CandidateUserId == candidateUserId
+                    && !notification.IsRead,
+                cancellationToken);
+
+        return new CandidateNotificationListResponse
+        {
+            Success = true,
+            Message = notifications.Count == 0
+                ? "Notification tapılmadı."
+                : $"{notifications.Count} notification tapıldı.",
+            CandidateUserId = candidateUserId,
+            UnreadCount = unreadCount,
+            Notifications = notifications
+                .Select(notification => new CandidateNotificationItemDto
+                {
+                    NotificationId = notification.Id,
+                    VacancyId = notification.VacancyId,
+                    ApplicationId = notification.VacancyApplicationId,
+                    Type = notification.Type,
+                    Title = notification.Title,
+                    Message = notification.Message,
+                    IsRead = notification.IsRead,
+                    CreatedAtUtc = notification.CreatedAtUtc,
+                    ReadAtUtc = notification.ReadAtUtc
+                })
+                .ToList()
+        };
+    }
+
+    public async Task<MarkCandidateNotificationReadResponse?>
+        MarkCandidateNotificationReadAsync(
+            int candidateUserId,
+            long notificationId,
+            CancellationToken cancellationToken = default)
+    {
+        if (candidateUserId <= 0 || notificationId <= 0)
+            return null;
+
+        var notification = await _dbContext.CandidateNotifications
+            .FirstOrDefaultAsync(
+                item => item.Id == notificationId
+                    && item.CandidateUserId == candidateUserId,
+                cancellationToken);
+
+        if (notification is null)
+            return null;
+
+        var wasAlreadyRead = notification.IsRead;
+        if (!notification.IsRead)
+        {
+            notification.IsRead = true;
+            notification.ReadAtUtc = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return new MarkCandidateNotificationReadResponse
+        {
+            Success = true,
+            Message = wasAlreadyRead
+                ? "Notification artıq oxunub."
+                : "Notification oxunmuş kimi qeyd edildi.",
+            NotificationId = notification.Id,
+            VacancyId = notification.VacancyId,
+            ApplicationId = notification.VacancyApplicationId,
+            WasAlreadyRead = wasAlreadyRead,
+            ReadAtUtc = notification.ReadAtUtc
+        };
     }
 
     public async Task<List<EmployerVacancyListItemDto>>
@@ -895,6 +1093,11 @@ public sealed class VacancyService : IVacancyService
                 "The selected stage does not belong to this vacancy.");
         }
 
+        var currentStage = vacancy.FunnelStages.FirstOrDefault(stage =>
+            stage.StageName.Equals(
+                application.FunnelStageName,
+                StringComparison.OrdinalIgnoreCase));
+
         var changed = !string.Equals(
             application.FunnelStageName,
             targetStage.StageName,
@@ -910,6 +1113,29 @@ public sealed class VacancyService : IVacancyService
             ? now
             : null;
         application.UpdatedAtUtc = now;
+
+        if (currentStage is not null
+            && targetStage.SortOrder > currentStage.SortOrder)
+        {
+            var roleTitle = string.IsNullOrWhiteSpace(vacancy.RoleTitle)
+                ? string.IsNullOrWhiteSpace(vacancy.PositionName)
+                    ? $"Vacancy #{vacancy.Id}"
+                    : vacancy.PositionName.Trim()
+                : vacancy.RoleTitle.Trim();
+
+            _dbContext.CandidateNotifications.Add(
+                new CandidateNotification
+                {
+                    CandidateUserId = application.CandidateUserId,
+                    VacancyId = vacancy.Id,
+                    VacancyApplicationId = application.Id,
+                    Type = CandidateNotificationTypes.FunnelStageAdvanced,
+                    Title = "Application advanced",
+                    Message = $"Your application for {roleTitle} moved to {targetStage.StageName}.",
+                    IsRead = false,
+                    CreatedAtUtc = now
+                });
+        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -1711,6 +1937,30 @@ public sealed class VacancyService : IVacancyService
         }
 
         return 0d;
+    }
+
+    private static string ResolveApplicationCompanyName(
+        Vacancy vacancy,
+        IReadOnlyDictionary<int, string> companyNames,
+        IReadOnlyDictionary<int, User> owners)
+    {
+        if (companyNames.TryGetValue(
+                vacancy.CompanyOwnerUserId,
+                out var companyName)
+            && !string.IsNullOrWhiteSpace(companyName))
+        {
+            return companyName.Trim();
+        }
+
+        if (owners.TryGetValue(vacancy.CompanyOwnerUserId, out var owner))
+        {
+            if (!string.IsNullOrWhiteSpace(owner.CompanyName))
+                return owner.CompanyName.Trim();
+
+            return BuildUserDisplayName(owner);
+        }
+
+        return "Employer";
     }
 
     private static string BuildUserDisplayName(User user)

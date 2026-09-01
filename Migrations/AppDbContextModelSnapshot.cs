@@ -1375,6 +1375,60 @@ namespace GloryLikeBackend.Migrations
                     b.ToTable("Vacancies", (string)null);
                 });
 
+            modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.CandidateNotification", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("CandidateUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("nvarchar(600)");
+
+                    b.Property<DateTime?>("ReadAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("VacancyApplicationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("VacancyId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VacancyApplicationId")
+                        .HasDatabaseName("IX_CandidateNotifications_VacancyApplicationId");
+
+                    b.HasIndex("VacancyId");
+
+                    b.HasIndex("CandidateUserId", "IsRead", "CreatedAtUtc")
+                        .HasDatabaseName("IX_CandidateNotifications_Candidate_Read_CreatedAt");
+
+                    b.ToTable("CandidateNotifications", (string)null);
+                });
+
             modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.VacancyApplication", b =>
                 {
                     b.Property<int>("Id")
@@ -2033,6 +2087,27 @@ namespace GloryLikeBackend.Migrations
                     b.Navigation("CompanyLocation");
 
                     b.Navigation("HiringPlan");
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.CandidateNotification", b =>
+                {
+                    b.HasOne("GloryLikeBackend.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("CandidateUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GloryLikeBackend.Models.Vacancies.VacancyApplication", null)
+                        .WithMany()
+                        .HasForeignKey("VacancyApplicationId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("GloryLikeBackend.Models.Vacancies.Vacancy", null)
+                        .WithMany()
+                        .HasForeignKey("VacancyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.VacancyApplicationRequirement", b =>

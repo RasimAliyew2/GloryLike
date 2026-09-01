@@ -57,6 +57,95 @@ public sealed class VacanciesController : ControllerBase
         return Ok(response);
     }
 
+    [HttpGet("candidate/{candidateUserId:int}/applications")]
+    [ProducesResponseType(
+        typeof(CandidateApplicationListResponse),
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(CandidateApplicationListResponse),
+        StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<CandidateApplicationListResponse>>
+        GetCandidateApplications(
+            int candidateUserId,
+            CancellationToken cancellationToken)
+    {
+        var response = await _vacancyService.GetCandidateApplicationsAsync(
+            candidateUserId,
+            cancellationToken);
+
+        if (response is null)
+        {
+            return NotFound(new CandidateApplicationListResponse
+            {
+                Success = false,
+                Message = "Candidate user SQL-də tapılmadı.",
+                CandidateUserId = candidateUserId
+            });
+        }
+
+        return Ok(response);
+    }
+
+    [HttpGet("candidate/{candidateUserId:int}/notifications")]
+    [ProducesResponseType(
+        typeof(CandidateNotificationListResponse),
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(CandidateNotificationListResponse),
+        StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<CandidateNotificationListResponse>>
+        GetCandidateNotifications(
+            int candidateUserId,
+            CancellationToken cancellationToken)
+    {
+        var response = await _vacancyService.GetCandidateNotificationsAsync(
+            candidateUserId,
+            cancellationToken);
+
+        if (response is null)
+        {
+            return NotFound(new CandidateNotificationListResponse
+            {
+                Success = false,
+                Message = "Candidate user SQL-də tapılmadı.",
+                CandidateUserId = candidateUserId
+            });
+        }
+
+        return Ok(response);
+    }
+
+    [HttpPost("candidate/{candidateUserId:int}/notifications/{notificationId:long}/read")]
+    [ProducesResponseType(
+        typeof(MarkCandidateNotificationReadResponse),
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(MarkCandidateNotificationReadResponse),
+        StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<MarkCandidateNotificationReadResponse>>
+        MarkCandidateNotificationRead(
+            int candidateUserId,
+            long notificationId,
+            CancellationToken cancellationToken)
+    {
+        var response = await _vacancyService.MarkCandidateNotificationReadAsync(
+            candidateUserId,
+            notificationId,
+            cancellationToken);
+
+        if (response is null)
+        {
+            return NotFound(new MarkCandidateNotificationReadResponse
+            {
+                Success = false,
+                Message = "Notification tapılmadı və ya bu candidate-ə aid deyil.",
+                NotificationId = notificationId
+            });
+        }
+
+        return Ok(response);
+    }
+
     [HttpPost("{vacancyId:int}/applications")]
     [ProducesResponseType(
         typeof(ApplyToVacancyResponse),

@@ -102,6 +102,8 @@ public class AppDbContext : DbContext
 
     public DbSet<VacancyApplication> VacancyApplications { get; set; }
 
+    public DbSet<CandidateNotification> CandidateNotifications { get; set; }
+
     public DbSet<VacancySkillRequirement> VacancySkillRequirements { get; set; }
 
     public DbSet<VacancyBenefit> VacancyBenefits { get; set; }
@@ -1229,6 +1231,48 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(item => item.CandidateUserId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CandidateNotification>(entity =>
+        {
+            entity.ToTable("CandidateNotifications");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Type)
+                .HasMaxLength(50)
+                .IsRequired();
+            entity.Property(item => item.Title)
+                .HasMaxLength(160)
+                .IsRequired();
+            entity.Property(item => item.Message)
+                .HasMaxLength(600)
+                .IsRequired();
+            entity.Property(item => item.CreatedAtUtc)
+                .IsRequired();
+
+            entity.HasIndex(item => new
+                {
+                    item.CandidateUserId,
+                    item.IsRead,
+                    item.CreatedAtUtc
+                })
+                .HasDatabaseName(
+                    "IX_CandidateNotifications_Candidate_Read_CreatedAt");
+            entity.HasIndex(item => item.VacancyApplicationId)
+                .HasDatabaseName(
+                    "IX_CandidateNotifications_VacancyApplicationId");
+
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(item => item.CandidateUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Vacancy>()
+                .WithMany()
+                .HasForeignKey(item => item.VacancyId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<VacancyApplication>()
+                .WithMany()
+                .HasForeignKey(item => item.VacancyApplicationId)
+                .OnDelete(DeleteBehavior.NoAction);
         });
 
         modelBuilder.Entity<VacancySkillRequirement>(entity =>

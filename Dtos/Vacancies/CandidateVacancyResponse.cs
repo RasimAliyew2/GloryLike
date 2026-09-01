@@ -40,6 +40,8 @@ public sealed class CandidateVacancyListItemDto
     public int? ApplicationId { get; set; }
     public string ApplicationStatus { get; set; } = string.Empty;
     public DateTime? AppliedAtUtc { get; set; }
+    public string FunnelStageName { get; set; } = string.Empty;
+    public DateTime? FunnelStageUpdatedAtUtc { get; set; }
 }
 
 public sealed class CandidateVacancySkillDto

@@ -9,6 +9,19 @@ public interface IVacancyService
         int candidateUserId,
         CancellationToken cancellationToken = default);
 
+    Task<CandidateApplicationListResponse?> GetCandidateApplicationsAsync(
+        int candidateUserId,
+        CancellationToken cancellationToken = default);
+
+    Task<CandidateNotificationListResponse?> GetCandidateNotificationsAsync(
+        int candidateUserId,
+        CancellationToken cancellationToken = default);
+
+    Task<MarkCandidateNotificationReadResponse?> MarkCandidateNotificationReadAsync(
+        int candidateUserId,
+        long notificationId,
+        CancellationToken cancellationToken = default);
+
     Task<List<EmployerVacancyListItemDto>> GetEmployerVacanciesAsync(
         int employerUserId,
         CancellationToken cancellationToken = default);
