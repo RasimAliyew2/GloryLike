@@ -51,6 +51,7 @@ public sealed class CandidateVacancySkillDto
     public int Weight { get; set; }
     public string RequirementType { get; set; } = string.Empty;
     public bool IsMatched { get; set; }
+    public double SignalScore { get; set; }
 }
 
 public sealed class ApplyToVacancyRequest

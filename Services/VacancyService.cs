@@ -256,6 +256,8 @@ public sealed class VacancyService : IVacancyService
             .AsNoTracking()
             .Include(application => application.Vacancy)
                 .ThenInclude(vacancy => vacancy.FunnelStages)
+            .Include(application => application.Vacancy)
+                .ThenInclude(vacancy => vacancy.SkillRequirements)
             .Where(application =>
                 application.CandidateUserId == candidateUserId)
             .OrderByDescending(application => application.AppliedAtUtc)
@@ -306,6 +308,7 @@ public sealed class VacancyService : IVacancyService
             {
                 ApplicationId = application.Id,
                 VacancyId = vacancy.Id,
+                CompanyOwnerUserId = vacancy.CompanyOwnerUserId,
                 PlatformVacancyId = vacancy.PlatformVacancyId,
                 CompanyName = ResolveApplicationCompanyName(
                     vacancy,
@@ -315,6 +318,14 @@ public sealed class VacancyService : IVacancyService
                 PositionName = vacancy.PositionName,
                 LocationName = vacancy.LocationName,
                 EmploymentType = vacancy.EmploymentType,
+                JobFamilyName = vacancy.JobFamilyName,
+                SeniorityName = vacancy.SeniorityName,
+                JobDescription = vacancy.JobDescription,
+                MinSalary = vacancy.MinSalary,
+                MaxSalary = vacancy.MaxSalary,
+                Currency = vacancy.Currency,
+                HideSalary = vacancy.HideSalary,
+                ApplicationDeadline = vacancy.ApplicationDeadline,
                 VacancyStatus = vacancy.Status,
                 ApplicationStatus = application.Status,
                 FunnelStageName = stageName,
@@ -325,7 +336,30 @@ public sealed class VacancyService : IVacancyService
                 AppliedAtUtc = application.AppliedAtUtc,
                 FunnelStageUpdatedAtUtc =
                     application.FunnelStageUpdatedAtUtc,
-                HiredAtUtc = application.HiredAtUtc
+                HiredAtUtc = application.HiredAtUtc,
+                Skills = vacancy.SkillRequirements
+                    .Where(skill => skill.SkillId > 0
+                        && !string.IsNullOrWhiteSpace(skill.SkillName))
+                    .GroupBy(skill => skill.SkillId)
+                    .Select(group =>
+                    {
+                        var first = group
+                            .OrderBy(skill => skill.SortOrder)
+                            .First();
+
+                        return new CandidateApplicationSkillDto
+                        {
+                            SkillId = first.SkillId,
+                            SkillName = first.SkillName.Trim(),
+                            Weight = group.Max(skill => Math.Max(
+                                skill.MinimumVerificationLevel,
+                                0)),
+                            RequirementType = first.RequirementType
+                        };
+                    })
+                    .OrderByDescending(skill => skill.Weight)
+                    .ThenBy(skill => skill.SkillName)
+                    .ToList()
             });
         }
 
@@ -1862,9 +1896,10 @@ public sealed class VacancyService : IVacancyService
                     RequirementType = first.RequirementType
                 };
 
-                templateSkill.IsMatched = GetCandidateScore(
+                templateSkill.SignalScore = GetCandidateScore(
                     templateSkill,
-                    candidateScores) > 0d;
+                    candidateScores);
+                templateSkill.IsMatched = templateSkill.SignalScore > 0d;
 
                 return templateSkill;
             })

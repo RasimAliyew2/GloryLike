@@ -12,12 +12,21 @@ public sealed class CandidateApplicationListItemDto
 {
     public int ApplicationId { get; set; }
     public int VacancyId { get; set; }
+    public int CompanyOwnerUserId { get; set; }
     public string PlatformVacancyId { get; set; } = string.Empty;
     public string CompanyName { get; set; } = string.Empty;
     public string RoleTitle { get; set; } = string.Empty;
     public string PositionName { get; set; } = string.Empty;
     public string LocationName { get; set; } = string.Empty;
     public string EmploymentType { get; set; } = string.Empty;
+    public string JobFamilyName { get; set; } = string.Empty;
+    public string SeniorityName { get; set; } = string.Empty;
+    public string JobDescription { get; set; } = string.Empty;
+    public decimal? MinSalary { get; set; }
+    public decimal? MaxSalary { get; set; }
+    public string Currency { get; set; } = string.Empty;
+    public bool HideSalary { get; set; }
+    public DateTime? ApplicationDeadline { get; set; }
     public string VacancyStatus { get; set; } = string.Empty;
     public string ApplicationStatus { get; set; } = string.Empty;
     public string FunnelStageName { get; set; } = string.Empty;
@@ -26,6 +35,15 @@ public sealed class CandidateApplicationListItemDto
     public DateTime AppliedAtUtc { get; set; }
     public DateTime? FunnelStageUpdatedAtUtc { get; set; }
     public DateTime? HiredAtUtc { get; set; }
+    public List<CandidateApplicationSkillDto> Skills { get; set; } = [];
+}
+
+public sealed class CandidateApplicationSkillDto
+{
+    public int SkillId { get; set; }
+    public string SkillName { get; set; } = string.Empty;
+    public int Weight { get; set; }
+    public string RequirementType { get; set; } = string.Empty;
 }
 
 public sealed class CandidateNotificationListResponse
