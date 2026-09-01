@@ -40,7 +40,8 @@ public sealed class TalentRadarService : ITalentRadarService
             .Include(vacancy => vacancy.SkillRequirements)
             .Where(vacancy =>
                 vacancy.CompanyOwnerUserId == access.CompanyOwnerUserId
-                && vacancy.Status == "Published")
+                && (vacancy.Status == "Published"
+                    || vacancy.Status == "Active"))
             .OrderByDescending(vacancy => vacancy.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
