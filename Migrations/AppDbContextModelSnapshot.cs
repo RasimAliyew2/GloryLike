@@ -458,6 +458,49 @@ namespace GloryLikeBackend.Migrations
                     b.ToTable("MicrosoftCalendarConnections");
                 });
 
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyAccessAuditEvent", b =>
+                {
+                    b.Property<Guid>("Id").HasColumnType("uniqueidentifier");
+                    b.Property<int>("ActorUserId").HasColumnType("int");
+                    b.Property<DateTime>("CreatedAtUtc").HasColumnType("datetime2");
+                    b.Property<string>("Details").IsRequired().HasMaxLength(1200).HasColumnType("nvarchar(1200)");
+                    b.Property<string>("EventType").IsRequired().HasMaxLength(40).HasColumnType("nvarchar(40)");
+                    b.Property<int>("OwnerUserId").HasColumnType("int");
+                    b.Property<Guid?>("RoleId").HasColumnType("uniqueidentifier");
+                    b.Property<string>("Summary").IsRequired().HasMaxLength(300).HasColumnType("nvarchar(300)");
+                    b.Property<int?>("TargetUserId").HasColumnType("int");
+                    b.HasKey("Id");
+                    b.HasIndex("ActorUserId").HasDatabaseName("IX_CompanyAccessAuditEvents_ActorUserId");
+                    b.HasIndex("TargetUserId").HasDatabaseName("IX_CompanyAccessAuditEvents_TargetUserId");
+                    b.HasIndex("OwnerUserId", "CreatedAtUtc").HasDatabaseName("IX_CompanyAccessAuditEvents_Owner_CreatedAt");
+                    b.ToTable("CompanyAccessAuditEvents", (string)null);
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyAccessRole", b =>
+                {
+                    b.Property<Guid>("Id").HasColumnType("uniqueidentifier");
+                    b.Property<DateTime>("CreatedAtUtc").HasColumnType("datetime2");
+                    b.Property<int>("CreatedByUserId").HasColumnType("int");
+                    b.Property<string>("Description").IsRequired().HasMaxLength(500).HasColumnType("nvarchar(500)");
+                    b.Property<bool>("IsFullAccess").HasColumnType("bit");
+                    b.Property<bool>("IsSystem").HasColumnType("bit");
+                    b.Property<string>("Name").IsRequired().HasMaxLength(80).HasColumnType("nvarchar(80)");
+                    b.Property<int>("OwnerUserId").HasColumnType("int");
+                    b.Property<string>("Scope").IsRequired().HasMaxLength(30).HasColumnType("nvarchar(30)");
+                    b.Property<DateTime>("UpdatedAtUtc").HasColumnType("datetime2");
+                    b.HasKey("Id");
+                    b.HasIndex("OwnerUserId", "Name").IsUnique().HasDatabaseName("UX_CompanyAccessRoles_Owner_Name");
+                    b.ToTable("CompanyAccessRoles", (string)null);
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyAccessRolePermission", b =>
+                {
+                    b.Property<Guid>("RoleId").HasColumnType("uniqueidentifier");
+                    b.Property<string>("PermissionKey").IsRequired().HasMaxLength(100).HasColumnType("nvarchar(100)");
+                    b.HasKey("RoleId", "PermissionKey");
+                    b.ToTable("CompanyAccessRolePermissions", (string)null);
+                });
+
             modelBuilder.Entity("GloryLikeBackend.Models.CompanyTeamInvitation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -468,6 +511,9 @@ namespace GloryLikeBackend.Migrations
 
                     b.Property<int?>("AcceptedUserId")
                         .HasColumnType("int");
+
+                    b.Property<Guid?>("AccessRoleId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
@@ -485,8 +531,8 @@ namespace GloryLikeBackend.Migrations
 
                     b.Property<string>("Role")
                         .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("nvarchar(40)");
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
 
                     b.Property<DateTime>("SentAtUtc")
                         .HasColumnType("datetime2");
@@ -509,6 +555,9 @@ namespace GloryLikeBackend.Migrations
                     b.HasIndex("AcceptedUserId")
                         .HasDatabaseName("IX_CompanyTeamInvitations_AcceptedUserId");
 
+                    b.HasIndex("AccessRoleId")
+                        .HasDatabaseName("IX_CompanyTeamInvitations_AccessRoleId");
+
                     b.HasIndex("OwnerUserId", "Email")
                         .IsUnique()
                         .HasDatabaseName("UX_CompanyTeamInvitations_Owner_Email");
@@ -518,6 +567,11 @@ namespace GloryLikeBackend.Migrations
                         .HasDatabaseName("UX_CompanyTeamInvitations_TokenHash");
 
                     b.ToTable("CompanyTeamInvitations", (string)null);
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyAccessRole", b =>
+                {
+                    b.Navigation("Permissions");
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.CompanyHiringPlan", b =>
@@ -1740,8 +1794,35 @@ namespace GloryLikeBackend.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyAccessRole", b =>
+                {
+                    b.HasOne("GloryLikeBackend.Models.User", "OwnerUser")
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("OwnerUser");
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyAccessRolePermission", b =>
+                {
+                    b.HasOne("GloryLikeBackend.Models.CompanyAccessRole", "Role")
+                        .WithMany("Permissions")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Role");
+                });
+
             modelBuilder.Entity("GloryLikeBackend.Models.CompanyTeamInvitation", b =>
                 {
+                    b.HasOne("GloryLikeBackend.Models.CompanyAccessRole", "AccessRole")
+                        .WithMany()
+                        .HasForeignKey("AccessRoleId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("GloryLikeBackend.Models.User", "AcceptedUser")
                         .WithMany()
                         .HasForeignKey("AcceptedUserId")
@@ -1754,6 +1835,8 @@ namespace GloryLikeBackend.Migrations
                         .IsRequired();
 
                     b.Navigation("AcceptedUser");
+
+                    b.Navigation("AccessRole");
 
                     b.Navigation("OwnerUser");
                 });

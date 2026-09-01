@@ -130,6 +130,36 @@ public sealed class CompanyTeamController : ControllerBase
         };
     }
 
+    [HttpPost("roles")]
+    public async Task<ActionResult<CompanyTeamResponse>> CreateRole(
+        [FromBody] SaveCompanyAccessRoleRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var result = await _companyTeamService.CreateRoleAsync(
+            request,
+            cancellationToken);
+        return RoleResult(result);
+    }
+
+    [HttpPut("roles/{roleId:guid}")]
+    public async Task<ActionResult<CompanyTeamResponse>> UpdateRole(
+        Guid roleId,
+        [FromBody] SaveCompanyAccessRoleRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var result = await _companyTeamService.UpdateRoleAsync(
+            roleId,
+            request,
+            cancellationToken);
+        return RoleResult(result);
+    }
+
     [HttpGet("invitations/resolve")]
     public async Task<ActionResult<
         ResolveCompanyTeamInvitationResponse>>
@@ -154,6 +184,23 @@ public sealed class CompanyTeamController : ControllerBase
                     StatusCode(
                         StatusCodes.Status410Gone,
                         result),
+            _ => BadRequest(result)
+        };
+    }
+
+    private ActionResult<CompanyTeamResponse> RoleResult(
+        CompanyTeamResponse result)
+    {
+        if (result.Success)
+            return Ok(result);
+
+        return result.ErrorCode switch
+        {
+            CompanyTeamErrorCodes.NotFound => NotFound(result),
+            CompanyTeamErrorCodes.Forbidden => StatusCode(
+                StatusCodes.Status403Forbidden,
+                result),
+            CompanyTeamErrorCodes.Conflict => Conflict(result),
             _ => BadRequest(result)
         };
     }

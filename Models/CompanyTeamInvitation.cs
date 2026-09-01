@@ -16,6 +16,10 @@ public sealed class CompanyTeamInvitation
 
     public string Role { get; set; } = string.Empty;
 
+    public Guid? AccessRoleId { get; set; }
+
+    public CompanyAccessRole? AccessRole { get; set; }
+
     public string Status { get; set; } = CompanyTeamInvitationStatuses.Invited;
 
     public string TokenHash { get; set; } = string.Empty;

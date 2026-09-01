@@ -28,6 +28,20 @@ public class AppDbContext : DbContext
         set;
     }
 
+    public DbSet<CompanyAccessRole> CompanyAccessRoles { get; set; }
+
+    public DbSet<CompanyAccessRolePermission> CompanyAccessRolePermissions
+    {
+        get;
+        set;
+    }
+
+    public DbSet<CompanyAccessAuditEvent> CompanyAccessAuditEvents
+    {
+        get;
+        set;
+    }
+
     public DbSet<CompanyCandidateMessage> CompanyCandidateMessages
     {
         get;
@@ -247,6 +261,7 @@ public class AppDbContext : DbContext
         });
 
         ConfigureCompanyTeamInvitations(modelBuilder);
+        ConfigureCompanyAccess(modelBuilder);
         ConfigureCompanyCandidateMessages(modelBuilder);
         ConfigureMicrosoftCalendar(modelBuilder);
         ConfigureCompanyProfiles(modelBuilder);
@@ -594,7 +609,7 @@ public class AppDbContext : DbContext
                 .HasMaxLength(150)
                 .IsRequired();
             entity.Property(item => item.Role)
-                .HasMaxLength(40)
+                .HasMaxLength(80)
                 .IsRequired();
             entity.Property(item => item.Status)
                 .HasMaxLength(20)
@@ -618,6 +633,9 @@ public class AppDbContext : DbContext
                 .IsUnique()
                 .HasDatabaseName(
                     "UX_CompanyTeamInvitations_TokenHash");
+            entity.HasIndex(item => item.AccessRoleId)
+                .HasDatabaseName(
+                    "IX_CompanyTeamInvitations_AccessRoleId");
 
             entity.HasOne(item => item.OwnerUser)
                 .WithMany()
@@ -627,6 +645,69 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(item => item.AcceptedUserId)
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.AccessRole)
+                .WithMany()
+                .HasForeignKey(item => item.AccessRoleId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigureCompanyAccess(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CompanyAccessRole>(entity =>
+        {
+            entity.ToTable("CompanyAccessRoles");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name)
+                .HasMaxLength(80)
+                .IsRequired();
+            entity.Property(item => item.Description)
+                .HasMaxLength(500)
+                .IsRequired();
+            entity.Property(item => item.Scope)
+                .HasMaxLength(30)
+                .IsRequired();
+            entity.HasIndex(item => new { item.OwnerUserId, item.Name })
+                .IsUnique()
+                .HasDatabaseName("UX_CompanyAccessRoles_Owner_Name");
+            entity.HasOne(item => item.OwnerUser)
+                .WithMany()
+                .HasForeignKey(item => item.OwnerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CompanyAccessRolePermission>(entity =>
+        {
+            entity.ToTable("CompanyAccessRolePermissions");
+            entity.HasKey(item => new { item.RoleId, item.PermissionKey });
+            entity.Property(item => item.PermissionKey)
+                .HasMaxLength(100)
+                .IsRequired();
+            entity.HasOne(item => item.Role)
+                .WithMany(item => item.Permissions)
+                .HasForeignKey(item => item.RoleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CompanyAccessAuditEvent>(entity =>
+        {
+            entity.ToTable("CompanyAccessAuditEvents");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.EventType)
+                .HasMaxLength(40)
+                .IsRequired();
+            entity.Property(item => item.Summary)
+                .HasMaxLength(300)
+                .IsRequired();
+            entity.Property(item => item.Details)
+                .HasMaxLength(1200)
+                .IsRequired();
+            entity.HasIndex(item => new { item.OwnerUserId, item.CreatedAtUtc })
+                .HasDatabaseName("IX_CompanyAccessAuditEvents_Owner_CreatedAt");
+            entity.HasIndex(item => item.ActorUserId)
+                .HasDatabaseName("IX_CompanyAccessAuditEvents_ActorUserId");
+            entity.HasIndex(item => item.TargetUserId)
+                .HasDatabaseName("IX_CompanyAccessAuditEvents_TargetUserId");
         });
     }
 

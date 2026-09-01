@@ -38,14 +38,10 @@ public sealed class CompanyAccessService : ICompanyAccessService
 
         var memberships = await _dbContext.CompanyTeamInvitations
             .AsNoTracking()
+            .Include(item => item.AccessRole)
+            .ThenInclude(role => role!.Permissions)
             .Where(item => item.AcceptedUserId == actorUserId)
             .OrderByDescending(item => item.AcceptedAtUtc)
-            .Select(item => new
-            {
-                item.OwnerUserId,
-                item.Role,
-                item.Status
-            })
             .ToListAsync(cancellationToken);
 
         var activeMembership = memberships.FirstOrDefault(
@@ -53,17 +49,26 @@ public sealed class CompanyAccessService : ICompanyAccessService
 
         if (activeMembership is not null)
         {
-            var isHrAdmin = string.Equals(
-                activeMembership.Role,
+            var isLegacyHrAdmin = string.Equals(
+                activeMembership.AccessRole?.Name ?? activeMembership.Role,
                 "HR Admin",
                 StringComparison.OrdinalIgnoreCase);
 
             return new CompanyAccessContext(
                 actorUserId,
                 activeMembership.OwnerUserId,
-                activeMembership.Role,
+                activeMembership.AccessRole?.Name ?? activeMembership.Role,
+                activeMembership.AccessRoleId,
+                activeMembership.AccessRole?.Scope
+                    ?? CompanyAccessRoleScopes.Company,
                 IsFounder: false,
-                CanManageTeam: isHrAdmin);
+                IsFullAccess: activeMembership.AccessRole?.IsFullAccess == true
+                    || isLegacyHrAdmin,
+                Permissions: new HashSet<string>(
+                    activeMembership.AccessRole?.Permissions
+                        .Select(permission => permission.PermissionKey)
+                        ?? [],
+                    StringComparer.OrdinalIgnoreCase));
         }
 
         // A removed team member must not silently become a new Founder.
@@ -73,9 +78,12 @@ public sealed class CompanyAccessService : ICompanyAccessService
         return new CompanyAccessContext(
             actorUserId,
             actorUserId,
-            "Admin",
+            "HR Admin",
+            RoleId: null,
+            Scope: CompanyAccessRoleScopes.Company,
             IsFounder: true,
-            CanManageTeam: true);
+            IsFullAccess: true,
+            Permissions: CompanyAccessPermissionCatalog.AllKeys);
     }
 
     public async Task<List<int>> GetActiveUserIdsAsync(
