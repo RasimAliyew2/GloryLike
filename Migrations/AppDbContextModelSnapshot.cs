@@ -653,6 +653,72 @@ namespace GloryLikeBackend.Migrations
                     b.ToTable("CompanyHiringPlans", (string)null);
                 });
 
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyLetterTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Audience")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(10000)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<int>("CompanyOwnerUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("DefaultKey")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyOwnerUserId")
+                        .HasDatabaseName("IX_CompanyLetterTemplates_CompanyOwnerUserId");
+
+                    b.HasIndex("CreatedByUserId")
+                        .HasDatabaseName("IX_CompanyLetterTemplates_CreatedByUserId");
+
+                    b.HasIndex("CompanyOwnerUserId", "DefaultKey")
+                        .IsUnique()
+                        .HasFilter("[DefaultKey] IS NOT NULL")
+                        .HasDatabaseName("UX_CompanyLetterTemplates_CompanyOwner_DefaultKey");
+
+                    b.ToTable("CompanyLetterTemplates", (string)null);
+                });
+
             modelBuilder.Entity("GloryLikeBackend.Models.CompanyProfile", b =>
                 {
                     b.Property<string>("AboutPageCustomHtml")
@@ -1974,6 +2040,25 @@ namespace GloryLikeBackend.Migrations
                     b.Navigation("JobFamily");
                     b.Navigation("Position");
                     b.Navigation("Seniority");
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyLetterTemplate", b =>
+                {
+                    b.HasOne("GloryLikeBackend.Models.User", "CompanyOwnerUser")
+                        .WithMany()
+                        .HasForeignKey("CompanyOwnerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GloryLikeBackend.Models.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CompanyOwnerUser");
+
+                    b.Navigation("CreatedByUser");
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.CompanyProfile", b =>

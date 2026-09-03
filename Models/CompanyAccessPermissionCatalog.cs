@@ -67,7 +67,8 @@ public static class CompanyAccessPermissionCatalog
             new("company.structure_edit", "Editing the Org Chart"),
             new("company.hiring_plan_view", "View a hiring plan"),
             new("company.hiring_plan_edit", "Editing a Hiring Plan", true),
-            new("company.career_page_edit", "Editing a career page")
+            new("company.career_page_edit", "Editing a career page"),
+            new("company.templates_manage", "Manage company templates")
         ]),
         new("team", "Team",
         [

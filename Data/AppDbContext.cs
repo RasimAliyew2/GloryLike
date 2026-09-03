@@ -80,6 +80,8 @@ public class AppDbContext : DbContext
 
     public DbSet<CompanyHiringPlan> CompanyHiringPlans { get; set; }
 
+    public DbSet<CompanyLetterTemplate> CompanyLetterTemplates { get; set; }
+
     public DbSet<JobFamily> JobFamilies { get; set; }
 
     public DbSet<Seniority> Seniorities { get; set; }
@@ -270,6 +272,7 @@ public class AppDbContext : DbContext
         ConfigureCompanyLocations(modelBuilder);
         ConfigureCompanyStructure(modelBuilder);
         ConfigureCompanyHiringPlans(modelBuilder);
+        ConfigureCompanyLetterTemplates(modelBuilder);
         ConfigureJobTaxonomy(modelBuilder);
 
         modelBuilder.Entity<SkillQuestionnaire>(entity =>
@@ -1070,6 +1073,55 @@ public class AppDbContext : DbContext
             entity.HasOne(item => item.Seniority)
                 .WithMany()
                 .HasForeignKey(item => item.SeniorityId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
+    private static void ConfigureCompanyLetterTemplates(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CompanyLetterTemplate>(entity =>
+        {
+            entity.ToTable("CompanyLetterTemplates");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.DefaultKey)
+                .HasMaxLength(80);
+            entity.Property(item => item.Name)
+                .HasMaxLength(120)
+                .IsRequired();
+            entity.Property(item => item.Audience)
+                .HasMaxLength(40)
+                .IsRequired();
+            entity.Property(item => item.Category)
+                .HasMaxLength(80)
+                .IsRequired();
+            entity.Property(item => item.Subject)
+                .HasMaxLength(250)
+                .IsRequired();
+            entity.Property(item => item.Body)
+                .HasMaxLength(10000)
+                .IsRequired();
+
+            entity.HasIndex(item => item.CompanyOwnerUserId)
+                .HasDatabaseName("IX_CompanyLetterTemplates_CompanyOwnerUserId");
+            entity.HasIndex(item => item.CreatedByUserId)
+                .HasDatabaseName("IX_CompanyLetterTemplates_CreatedByUserId");
+            entity.HasIndex(item => new
+                {
+                    item.CompanyOwnerUserId,
+                    item.DefaultKey
+                })
+                .IsUnique()
+                .HasFilter("[DefaultKey] IS NOT NULL")
+                .HasDatabaseName(
+                    "UX_CompanyLetterTemplates_CompanyOwner_DefaultKey");
+
+            entity.HasOne(item => item.CompanyOwnerUser)
+                .WithMany()
+                .HasForeignKey(item => item.CompanyOwnerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(item => item.CreatedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }

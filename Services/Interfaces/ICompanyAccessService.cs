@@ -49,4 +49,9 @@ public sealed record CompanyAccessContext(
         IsFounder
         || IsFullAccess
         || Permissions.Contains("team.participants.deactivate");
+
+    public bool CanManageTemplates =>
+        IsFounder
+        || IsFullAccess
+        || Permissions.Contains("company.templates_manage");
 }

@@ -74,6 +74,7 @@ builder.Services.AddHttpClient<
     IOpenAiCompanyAboutPageDesigner,
     OpenAiCompanyAboutPageDesigner>();
 builder.Services.AddScoped<ICompanyHiringPlanService, CompanyHiringPlanService>();
+builder.Services.AddScoped<ICompanyTemplateService, CompanyTemplateService>();
 builder.Services.AddSingleton<IXlsxTableService, XlsxTableService>();
 builder.Services.AddScoped<ICompanyStructureService, CompanyStructureService>();
 builder.Services.AddScoped<IOrganizationReportsService, OrganizationReportsService>();
