@@ -261,6 +261,9 @@ public sealed class CreateVacancyScreeningChoiceRequest
 
 public sealed class CreateVacancyFunnelStageRequest
 {
+    [System.ComponentModel.DataAnnotations.Required]
+    [System.ComponentModel.DataAnnotations.RegularExpression("^(Recruiter|Hiring Manager|HR)$")]
+    public string ResponsibleRole { get; set; } = "Recruiter";
     [Required]
     [StringLength(100)]
     public string StageName { get; set; } = string.Empty;

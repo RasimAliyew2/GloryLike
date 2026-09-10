@@ -694,6 +694,7 @@ public sealed class VacancyService : IVacancyService
                 {
                     StageId = stage.Id,
                     StageName = stage.StageName,
+                    ResponsibleRole = stage.ResponsibleRole,
                     Hours = stage.Hours,
                     IsStandard = stage.IsStandard,
                     SortOrder = stage.SortOrder
@@ -2403,7 +2404,8 @@ public sealed class VacancyService : IVacancyService
             stage =>
                 string.IsNullOrWhiteSpace(stage.StageName)
                 || stage.StageName.Length > 100
-                || stage.Hours is < 0 or > 8760))
+                || stage.Hours is < 0 or > 8760
+                || stage.ResponsibleRole is not ("Recruiter" or "Hiring Manager" or "HR")))
         {
             return "Funnel mərhələsinin adı və ya saatı düzgün deyil.";
         }
@@ -2604,6 +2606,7 @@ public sealed class VacancyService : IVacancyService
                 .Select(item => new CreateVacancyFunnelStageRequest
                 {
                     StageName = item.StageName,
+                    ResponsibleRole = item.ResponsibleRole,
                     Hours = item.Hours,
                     IsStandard = item.IsStandard
                 })
@@ -2987,6 +2990,7 @@ public sealed class VacancyService : IVacancyService
                 {
                     Vacancy = vacancy,
                     StageName = stage.StageName,
+                    ResponsibleRole = stage.ResponsibleRole,
                     Hours = stage.Hours,
                     IsStandard = stage.IsStandard,
                     SortOrder = index

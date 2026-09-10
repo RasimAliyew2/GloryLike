@@ -80,6 +80,7 @@ public class AppDbContext : DbContext
 
     public DbSet<CompanyHiringPlan> CompanyHiringPlans { get; set; }
 
+    public DbSet<CompanyFunnelTemplate> CompanyFunnelTemplates { get; set; }
     public DbSet<CompanyLetterTemplate> CompanyLetterTemplates { get; set; }
 
     public DbSet<JobFamily> JobFamilies { get; set; }
@@ -273,6 +274,7 @@ public class AppDbContext : DbContext
         ConfigureCompanyStructure(modelBuilder);
         ConfigureCompanyHiringPlans(modelBuilder);
         ConfigureCompanyLetterTemplates(modelBuilder);
+        ConfigureCompanyFunnelTemplates(modelBuilder);
         ConfigureJobTaxonomy(modelBuilder);
 
         modelBuilder.Entity<SkillQuestionnaire>(entity =>
@@ -1126,6 +1128,45 @@ public class AppDbContext : DbContext
         });
     }
 
+    private static void ConfigureCompanyFunnelTemplates(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CompanyFunnelTemplate>(entity =>
+        {
+            entity.ToTable("CompanyFunnelTemplates");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.DefaultKey)
+                .HasMaxLength(80);
+            entity.Property(item => item.Name)
+                .HasMaxLength(120)
+                .IsRequired();
+            entity.Property(item => item.Description).HasMaxLength(1000).IsRequired();
+            entity.Property(item => item.StagesJson).IsRequired();
+
+            entity.HasIndex(item => item.CompanyOwnerUserId)
+                .HasDatabaseName("IX_CompanyFunnelTemplates_CompanyOwnerUserId");
+            entity.HasIndex(item => item.CreatedByUserId)
+                .HasDatabaseName("IX_CompanyFunnelTemplates_CreatedByUserId");
+            entity.HasIndex(item => new
+                {
+                    item.CompanyOwnerUserId,
+                    item.DefaultKey
+                })
+                .IsUnique()
+                .HasFilter("[DefaultKey] IS NOT NULL")
+                .HasDatabaseName(
+                    "UX_CompanyFunnelTemplates_CompanyOwner_DefaultKey");
+
+            entity.HasOne(item => item.CompanyOwnerUser)
+                .WithMany()
+                .HasForeignKey(item => item.CompanyOwnerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(item => item.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+    }
+
     private static void ConfigureVacancies(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Vacancy>(entity =>
@@ -1479,6 +1520,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<VacancyFunnelStage>(entity =>
         {
             entity.ToTable("VacancyFunnelStages");
+            entity.Property(item => item.ResponsibleRole).HasMaxLength(40).HasDefaultValue("Recruiter").IsRequired();
             entity.HasKey(item => item.Id);
             entity.Property(item => item.StageName)
                 .HasMaxLength(100)

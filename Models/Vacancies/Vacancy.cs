@@ -174,6 +174,9 @@ public sealed class VacancyScreeningAnswer
 
 public sealed class VacancyFunnelStage
 {
+    [System.ComponentModel.DataAnnotations.Required]
+    [System.ComponentModel.DataAnnotations.RegularExpression("^(Recruiter|Hiring Manager|HR)$")]
+    public string ResponsibleRole { get; set; } = "Recruiter";
     public int Id { get; set; }
     public int VacancyId { get; set; }
     public string StageName { get; set; } = string.Empty;

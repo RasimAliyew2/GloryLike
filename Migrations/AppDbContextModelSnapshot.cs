@@ -719,6 +719,57 @@ namespace GloryLikeBackend.Migrations
                     b.ToTable("CompanyLetterTemplates", (string)null);
                 });
 
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyFunnelTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("CompanyOwnerUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("DefaultKey")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .IsRequired().HasMaxLength(1000).HasColumnType("nvarchar(1000)");
+                    b.Property<string>("StagesJson")
+                        .IsRequired().HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyOwnerUserId")
+                        .HasDatabaseName("IX_CompanyFunnelTemplates_CompanyOwnerUserId");
+
+                    b.HasIndex("CreatedByUserId")
+                        .HasDatabaseName("IX_CompanyFunnelTemplates_CreatedByUserId");
+
+                    b.HasIndex("CompanyOwnerUserId", "DefaultKey")
+                        .IsUnique()
+                        .HasFilter("[DefaultKey] IS NOT NULL")
+                        .HasDatabaseName("UX_CompanyFunnelTemplates_CompanyOwner_DefaultKey");
+
+                    b.ToTable("CompanyFunnelTemplates", (string)null);
+                });
+
             modelBuilder.Entity("GloryLikeBackend.Models.CompanyProfile", b =>
                 {
                     b.Property<string>("AboutPageCustomHtml")
@@ -1697,6 +1748,10 @@ namespace GloryLikeBackend.Migrations
                     b.Property<int>("VacancyId")
                         .HasColumnType("int");
 
+                    b.Property<string>("ResponsibleRole")
+                        .IsRequired().ValueGeneratedOnAdd().HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)").HasDefaultValue("Recruiter");
+
                     b.HasKey("Id");
 
                     b.HasIndex("VacancyId", "SortOrder")
@@ -2043,6 +2098,25 @@ namespace GloryLikeBackend.Migrations
                 });
 
             modelBuilder.Entity("GloryLikeBackend.Models.CompanyLetterTemplate", b =>
+                {
+                    b.HasOne("GloryLikeBackend.Models.User", "CompanyOwnerUser")
+                        .WithMany()
+                        .HasForeignKey("CompanyOwnerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GloryLikeBackend.Models.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CompanyOwnerUser");
+
+                    b.Navigation("CreatedByUser");
+                });
+
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyFunnelTemplate", b =>
                 {
                     b.HasOne("GloryLikeBackend.Models.User", "CompanyOwnerUser")
                         .WithMany()
