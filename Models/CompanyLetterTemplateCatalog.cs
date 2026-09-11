@@ -27,6 +27,7 @@ public static class CompanyLetterTemplateCatalog
     [
         "{candidate_name}",
         "{vacancy_title}",
+        "{vacancy_link}",
         "{company_name}",
         "{recruiter_name}",
         "{hiring_manager_name}",

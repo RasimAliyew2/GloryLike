@@ -4,6 +4,8 @@ namespace GloryLikeBackend.Models.Vacancies;
 
 public sealed class Vacancy
 {
+    public string AutomationsJson { get; set; } = "[]";
+    public int AutomationEventVersion { get; set; }
     public int Id { get; set; }
     public int EmployerUserId { get; set; }
     public int CompanyOwnerUserId { get; set; }
@@ -88,6 +90,7 @@ public static class VacancyApplicationStatuses
 
 public sealed class VacancyApplication
 {
+    public int AutomationEventVersion { get; set; }
     public int Id { get; set; }
     public int VacancyId { get; set; }
     public int CandidateUserId { get; set; }

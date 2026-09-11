@@ -76,6 +76,11 @@ builder.Services.AddHttpClient<
 builder.Services.AddScoped<ICompanyHiringPlanService, CompanyHiringPlanService>();
 builder.Services.AddScoped<ICompanyTemplateService, CompanyTemplateService>();
 builder.Services.AddScoped<ICompanyFunnelService, CompanyFunnelService>();
+builder.Services.AddScoped<CompanyAutomationService>();
+builder.Services.AddScoped<AutomationEngine>();
+builder.Services.AddScoped<AutomationEmailDispatcher>();
+builder.Services.AddScoped<SmtpRegistrationEmailSender>();
+builder.Services.AddHostedService<AutomationEmailWorker>();
 builder.Services.AddSingleton<IXlsxTableService, XlsxTableService>();
 builder.Services.AddScoped<ICompanyStructureService, CompanyStructureService>();
 builder.Services.AddScoped<IOrganizationReportsService, OrganizationReportsService>();

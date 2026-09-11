@@ -80,6 +80,8 @@ public class AppDbContext : DbContext
 
     public DbSet<CompanyHiringPlan> CompanyHiringPlans { get; set; }
 
+    public DbSet<CompanyAutomation> CompanyAutomations { get; set; }
+    public DbSet<AutomationEmailDelivery> AutomationEmailDeliveries { get; set; }
     public DbSet<CompanyFunnelTemplate> CompanyFunnelTemplates { get; set; }
     public DbSet<CompanyLetterTemplate> CompanyLetterTemplates { get; set; }
 
@@ -275,6 +277,7 @@ public class AppDbContext : DbContext
         ConfigureCompanyHiringPlans(modelBuilder);
         ConfigureCompanyLetterTemplates(modelBuilder);
         ConfigureCompanyFunnelTemplates(modelBuilder);
+        modelBuilder.ConfigureAutomations();
         ConfigureJobTaxonomy(modelBuilder);
 
         modelBuilder.Entity<SkillQuestionnaire>(entity =>

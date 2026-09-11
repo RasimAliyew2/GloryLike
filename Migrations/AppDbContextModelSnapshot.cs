@@ -22,6 +22,47 @@ namespace GloryLikeBackend.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("GloryLikeBackend.Models.CompanyAutomation", b =>
+            {
+                b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uniqueidentifier");
+                b.Property<int>("CompanyOwnerUserId").HasColumnType("int");
+                b.Property<int>("CreatedByUserId").HasColumnType("int");
+                b.Property<string>("Name").IsRequired().HasMaxLength(120).HasColumnType("nvarchar(120)");
+                b.Property<string>("RuleJson").IsRequired().HasColumnType("nvarchar(max)");
+                b.Property<bool>("IsEnabled").HasColumnType("bit");
+                b.Property<DateTime>("CreatedAtUtc").HasColumnType("datetime2");
+                b.Property<DateTime>("UpdatedAtUtc").HasColumnType("datetime2");
+                b.HasKey("Id");
+                b.HasIndex("CompanyOwnerUserId").HasDatabaseName("IX_CompanyAutomations_CompanyOwnerUserId");
+                b.ToTable("CompanyAutomations",(string)null);
+            });
+            modelBuilder.Entity("GloryLikeBackend.Models.AutomationEmailDelivery", b =>
+            {
+                b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("uniqueidentifier");
+                b.Property<int>("CompanyOwnerUserId").HasColumnType("int");
+                b.Property<int>("VacancyId").HasColumnType("int");
+                b.Property<int>("ApplicationId").HasColumnType("int");
+                b.Property<int>("CandidateUserId").HasColumnType("int");
+                b.Property<Guid>("RuleId").HasColumnType("uniqueidentifier");
+                b.Property<string>("EventKey").IsRequired().HasMaxLength(128).HasColumnType("nvarchar(128)");
+                b.Property<string>("EventType").IsRequired().HasMaxLength(32).HasColumnType("nvarchar(32)");
+                b.Property<string>("RuleName").IsRequired().HasMaxLength(120).HasColumnType("nvarchar(120)");
+                b.Property<string>("RecipientEmail").IsRequired().HasMaxLength(320).HasColumnType("nvarchar(320)");
+                b.Property<string>("Subject").IsRequired().HasColumnType("nvarchar(max)");
+                b.Property<string>("Body").IsRequired().HasColumnType("nvarchar(max)");
+                b.Property<string>("Status").IsRequired().HasMaxLength(16).HasColumnType("nvarchar(16)");
+                b.Property<string>("LastError").IsRequired().HasMaxLength(1000).HasColumnType("nvarchar(1000)");
+                b.Property<int>("Attempts").HasColumnType("int");
+                b.Property<DateTime>("CreatedAtUtc").HasColumnType("datetime2");
+                b.Property<DateTime>("NextAttemptAtUtc").HasColumnType("datetime2");
+                b.Property<DateTime?>("LeaseUntilUtc").HasColumnType("datetime2");
+                b.Property<DateTime?>("SentAtUtc").HasColumnType("datetime2");
+                b.HasKey("Id");
+                b.HasIndex("CompanyOwnerUserId").HasDatabaseName("IX_AutomationEmailDeliveries_CompanyOwnerUserId");
+                b.HasIndex("EventKey", "RuleId", "ApplicationId").IsUnique().HasDatabaseName("IX_AutomationEmailDeliveries_EventKey_RuleId_ApplicationId");
+                b.HasIndex("Status", "NextAttemptAtUtc").HasDatabaseName("IX_AutomationEmailDeliveries_Status_NextAttemptAtUtc");
+                b.ToTable("AutomationEmailDeliveries",(string)null);
+            });
             modelBuilder.Entity("GloryLikeBackend.Models.Ai.SkillQuestionnaire", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1275,6 +1316,8 @@ namespace GloryLikeBackend.Migrations
 
             modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.Vacancy", b =>
                 {
+                    b.Property<int>("AutomationEventVersion").IsConcurrencyToken().ValueGeneratedOnAdd().HasColumnType("int").HasDefaultValue(0);
+                    b.Property<string>("AutomationsJson").IsRequired().ValueGeneratedOnAdd().HasColumnType("nvarchar(max)").HasDefaultValue("[]");
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
@@ -1548,6 +1591,7 @@ namespace GloryLikeBackend.Migrations
 
             modelBuilder.Entity("GloryLikeBackend.Models.Vacancies.VacancyApplication", b =>
                 {
+                    b.Property<int>("AutomationEventVersion").IsConcurrencyToken().ValueGeneratedOnAdd().HasColumnType("int").HasDefaultValue(0);
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");

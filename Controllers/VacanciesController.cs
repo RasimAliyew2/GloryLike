@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using GloryLikeBackend.Dtos.Vacancies;
 using GloryLikeBackend.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
@@ -9,10 +11,12 @@ namespace GloryLikeBackend.Controllers;
 public sealed class VacanciesController : ControllerBase
 {
     private readonly IVacancyService _vacancyService;
+    private readonly string _backendSecret;
 
-    public VacanciesController(IVacancyService vacancyService)
+    public VacanciesController(IVacancyService vacancyService, IConfiguration configuration)
     {
         _vacancyService = vacancyService;
+        _backendSecret = configuration["SocialAuth:BackendSharedSecret"] ?? "";
     }
 
     [HttpGet("candidate/{candidateUserId:int}")]
@@ -292,6 +296,7 @@ public sealed class VacanciesController : ControllerBase
             [FromBody] MoveApplicantFunnelStageRequest request,
             CancellationToken cancellationToken)
     {
+        if (!IsTrustedWebApp()) return Unauthorized();
         var result = await _vacancyService.MoveApplicantFunnelStageAsync(
             request.EmployerUserId,
             vacancyId,
@@ -413,6 +418,7 @@ public sealed class VacanciesController : ControllerBase
             [FromBody] ToggleEmployerVacancyStatusRequest request,
             CancellationToken cancellationToken)
     {
+        if (!IsTrustedWebApp()) return Unauthorized();
         var result = await _vacancyService.CloseEmployerStatusAsync(
             request.EmployerUserId,
             vacancyId,
@@ -451,6 +457,7 @@ public sealed class VacanciesController : ControllerBase
         [FromBody] CreateVacancyRequest request,
         CancellationToken cancellationToken)
     {
+        if (!IsTrustedWebApp()) return Unauthorized();
         var result = await _vacancyService.CreateAsync(
             request,
             cancellationToken);
@@ -495,6 +502,7 @@ public sealed class VacanciesController : ControllerBase
         [FromBody] CreateVacancyRequest request,
         CancellationToken cancellationToken)
     {
+        if (!IsTrustedWebApp()) return Unauthorized();
         var result = await _vacancyService.UpdateAsync(
             vacancyId,
             request,
@@ -521,4 +529,8 @@ public sealed class VacanciesController : ControllerBase
             _ => BadRequest(response)
         };
     }
+    private bool IsTrustedWebApp() => !string.IsNullOrWhiteSpace(_backendSecret)
+        && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(_backendSecret),
+            Encoding.UTF8.GetBytes(Request.Headers["X-BothFind-Backend-Secret"].ToString()));
+
 }

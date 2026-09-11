@@ -16,6 +16,8 @@ public sealed class CreateVacancyRequest
 
 public sealed class CreateVacancyPayload
 {
+    public List<Guid>? AutomationTemplateIds { get; set; }
+    public List<GloryLikeBackend.Dtos.CompanyTemplates.CompanyAutomationDto> SavedAutomations { get; set; } = [];
     [Range(1, int.MaxValue)]
     public int JobFamilyId { get; set; }
 

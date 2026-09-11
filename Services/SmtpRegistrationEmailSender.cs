@@ -105,11 +105,19 @@ public sealed class SmtpRegistrationEmailSender
             cancellationToken);
     }
 
+    public Task SendAutomationAsync(string recipientEmail,string subject,string text,Guid deliveryId,CancellationToken cancellationToken)
+    {
+        var html="<div style='font-family:Arial,sans-serif;line-height:1.6;white-space:pre-wrap'>"
+            + WebUtility.HtmlEncode(text) + "</div>";
+        return SendAsync(recipientEmail,subject,html,cancellationToken,deliveryId);
+    }
+
     private async Task SendAsync(
         string recipientEmail,
         string subject,
         string htmlBody,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? deliveryId = null)
     {
         ValidateConfiguration();
 
@@ -122,6 +130,8 @@ public sealed class SmtpRegistrationEmailSender
             Body = htmlBody,
             IsBodyHtml = true
         };
+
+        if (deliveryId.HasValue) message.Headers.Add("Message-ID", $"<{deliveryId.Value:N}@bothfind.com>");
 
         message.To.Add(
             new MailAddress(recipientEmail));

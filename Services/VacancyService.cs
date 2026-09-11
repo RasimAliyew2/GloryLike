@@ -1,3 +1,4 @@
+using GloryLikeBackend.Dtos.CompanyTemplates;
 using System.Text.Json;
 using System.Globalization;
 using GloryLikeBackend.Data;
@@ -63,16 +64,22 @@ public sealed class VacancyService : IVacancyService
     private static readonly JsonSerializerOptions PayloadJsonOptions =
         new(JsonSerializerDefaults.Web);
 
+    private readonly AutomationEngine _automationEngine;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly AppDbContext _dbContext;
     private readonly ICompanyAccessService _companyAccessService;
     private readonly ILogger<VacancyService> _logger;
 
     public VacancyService(
         AppDbContext dbContext,
+        AutomationEngine automationEngine,
+        IServiceScopeFactory scopeFactory,
         ICompanyAccessService companyAccessService,
         ILogger<VacancyService> logger)
     {
         _dbContext = dbContext;
+        _automationEngine = automationEngine;
+        _scopeFactory = scopeFactory;
         _companyAccessService = companyAccessService;
         _logger = logger;
     }
@@ -879,7 +886,13 @@ public sealed class VacancyService : IVacancyService
         {
             vacancy.Status = "Closed";
             vacancy.UpdatedAtUtc = DateTime.UtcNow;
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            vacancy.AutomationEventVersion++;
+            await _automationEngine.EnqueueAsync(vacancy,employerUserId,"VacancyClosed","Closed",
+                $"vacancy:{vacancy.Id}:closed:{vacancy.AutomationEventVersion}",null,cancellationToken);
+            try { await _dbContext.SaveChangesAsync(cancellationToken); }
+            catch (DbUpdateConcurrencyException) { return ToggleEmployerVacancyStatusResult.Invalid(employerUserId,vacancyId,"This vacancy changed. Reload and try again."); }
+            catch (DbUpdateException ex) when (IsDuplicateAutomationEvent(ex)) { return ToggleEmployerVacancyStatusResult.Invalid(employerUserId,vacancyId,"This event was already processed. Reload the vacancy."); }
+            await TryDispatchAutomationAsync(vacancy.Id);
         }
 
         return ToggleEmployerVacancyStatusResult.Updated(vacancy);
@@ -1141,6 +1154,7 @@ public sealed class VacancyService : IVacancyService
         if (!changed)
             return MoveApplicantFunnelStageResult.Moved(application, false);
 
+        var wasHired = application.HiredAtUtc.HasValue;
         var now = DateTime.UtcNow;
         application.FunnelStageName = targetStage.StageName;
         application.FunnelStageUpdatedAtUtc = now;
@@ -1172,7 +1186,18 @@ public sealed class VacancyService : IVacancyService
                 });
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        application.AutomationEventVersion++;
+        var eventKey=$"application:{application.Id}:version:{application.AutomationEventVersion}";
+        if (currentStage is not null && targetStage.SortOrder > currentStage.SortOrder)
+            await _automationEngine.EnqueueAsync(vacancy,employerUserId,"StageAdvanced",targetStage.StageName,
+                eventKey+":advanced",new[]{application.Id},cancellationToken);
+        if (!wasHired && application.HiredAtUtc.HasValue)
+            await _automationEngine.EnqueueAsync(vacancy,employerUserId,"CandidateHired",targetStage.StageName,
+                eventKey+":hired",new[]{application.Id},cancellationToken);
+        try { await _dbContext.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateConcurrencyException) { return MoveApplicantFunnelStageResult.Invalid(vacancyId,applicationId,"This application changed. Reload and try again."); }
+        catch (DbUpdateException ex) when (IsDuplicateAutomationEvent(ex)) { return MoveApplicantFunnelStageResult.Invalid(vacancyId,applicationId,"This event was already processed. Reload the vacancy."); }
+        await TryDispatchAutomationAsync(vacancy.Id);
 
         return MoveApplicantFunnelStageResult.Moved(application, true);
     }
@@ -1569,6 +1594,12 @@ public sealed class VacancyService : IVacancyService
         AddFunnelStages(vacancy, payload);
         AddPublicationChannels(vacancy, payload);
 
+        var automationBinding = await _automationEngine.BindAsync(request.EmployerUserId,
+            access.CompanyOwnerUserId, payload.AutomationTemplateIds, "[]",
+            payload.FunnelStages.Select(stage => stage.StageName), cancellationToken);
+        if (automationBinding.Error is not null) return CreateVacancyResult.Invalid(automationBinding.Error);
+        vacancy.AutomationsJson = automationBinding.Json;
+
         _dbContext.Vacancies.Add(vacancy);
 
         try
@@ -1816,6 +1847,12 @@ public sealed class VacancyService : IVacancyService
                 $"SkillId {missingSkillId} SQL skill kataloqunda tapılmadı.");
         }
 
+        var automationBinding = await _automationEngine.BindAsync(request.EmployerUserId,
+            access.CompanyOwnerUserId, payload.AutomationTemplateIds, vacancy.AutomationsJson,
+            payload.FunnelStages.Select(stage => stage.StageName), cancellationToken);
+        if (automationBinding.Error is not null) return UpdateVacancyResult.Invalid(request.EmployerUserId, vacancyId, automationBinding.Error);
+        vacancy.AutomationsJson = automationBinding.Json;
+
         ApplyEditableValues(
             vacancy,
             payload,
@@ -1845,6 +1882,36 @@ public sealed class VacancyService : IVacancyService
         }
 
         return UpdateVacancyResult.Updated(vacancy);
+    }
+
+    internal static decimal? AutomationScore(IReadOnlyCollection<UserSkill> skills)
+    {
+        if (skills.Count==0) return null;
+        var scores=BuildCandidateScoreMap(skills).ById.Values.ToList();
+        return scores.Count==0 ? null : (decimal)Math.Floor(scores.Average()+0.5d);
+    }
+    internal static decimal? AutomationMatchScore(Vacancy vacancy,IReadOnlyCollection<UserSkill> skills)
+    {
+        if(skills.Count==0) return null;
+        var map=BuildCandidateScoreMap(skills);
+        var template=BuildCandidateVacancyTemplate(vacancy,map);
+        return template.Sum(s => s.Weight)<=0 ? null : CalculateCandidateVacancyReadiness(template,map);
+    }
+    private static bool IsDuplicateAutomationEvent(DbUpdateException exception) =>
+        exception.InnerException is Microsoft.Data.SqlClient.SqlException sql
+        && sql.Number is 2601 or 2627
+        && sql.Message.Contains("IX_AutomationEmailDeliveries_EventKey_RuleId_ApplicationId", StringComparison.Ordinal);
+
+    private async Task TryDispatchAutomationAsync(int vacancyId)
+    {
+        // Make an immediate bounded attempt even on IIS; the durable worker handles the remainder.
+        try
+        {
+            using var scope=_scopeFactory.CreateScope();
+            using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(28));
+            await scope.ServiceProvider.GetRequiredService<AutomationEmailDispatcher>().ProcessDueAsync(timeout.Token,vacancyId);
+        }
+        catch(Exception ex) { _logger.LogWarning(ex,"Automation emails remain queued for vacancy {VacancyId}.",vacancyId); }
     }
 
     private static CandidateScoreMap BuildCandidateScoreMap(
@@ -2455,6 +2522,9 @@ public sealed class VacancyService : IVacancyService
 
         return new CreateVacancyPayload
         {
+            AutomationTemplateIds = AutomationEngine.ReadCopies(vacancy.AutomationsJson).Select(c => c.SourceTemplateId).ToList(),
+            SavedAutomations = AutomationEngine.ReadCopies(vacancy.AutomationsJson).Select(c => new CompanyAutomationDto {
+                Id=c.SourceTemplateId,Name=c.Name,IsEnabled=true,Rule=c.Rule,LetterName=c.LetterName,LetterAvailable=true }).ToList(),
             JobFamilyId = vacancy.JobFamilyId,
             SeniorityId = vacancy.SeniorityId,
             PositionId = vacancy.PositionId,
